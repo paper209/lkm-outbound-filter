@@ -59,8 +59,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     struct tcp_session **sessions = krealloc(tcp_sessions, sizeof(*tcp_sessions)*(++tcp_sessions_len), GFP_ATOMIC);
     if (!sessions) {
         kfree(session);
-        kfree(sessions);
-        
+        tcp_sessions_len--;
         spin_unlock(&tcp_lock);
 
         return ERROR;
