@@ -55,15 +55,16 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     session->buffer = NULL;
     session->buffer_len = 0;
 
-    tcp_sessions = krealloc(tcp_sessions, sizeof(*tcp_sessions)*(++tcp_sessions_len), GFP_ATOMIC);
-    if (!tcp_sessions) {
+    struct tcp_session **sessions = krealloc(tcp_sessions, sizeof(*tcp_sessions)*(++tcp_sessions_len), GFP_ATOMIC);
+    if (!sessions) {
         kfree(session);
-        kfree(tcp_sessions);
+        kfree(sessions);
         
         spin_unlock(&tcp_lock);
 
         return FALSE;
     }
+    tcp_sessions = sessions;
 
     tcp_sessions[tcp_sessions_len-1] = session;
     spin_unlock(&tcp_lock);
