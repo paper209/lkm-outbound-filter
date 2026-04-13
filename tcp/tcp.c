@@ -5,6 +5,7 @@
 
 #define TRUE 1
 #define FALSE 0
+#define ERROR -1
 
 struct tcp_session {
     __be32 saddr;
@@ -44,7 +45,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     struct tcp_session *session = kmalloc(sizeof(struct tcp_session), GFP_ATOMIC);
     if (!session) {
         spin_unlock(&tcp_lock);
-        return FALSE;
+        return ERROR;
     }
 
     session->saddr = iph->saddr;
@@ -62,11 +63,12 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
         
         spin_unlock(&tcp_lock);
 
-        return FALSE;
+        return ERROR;
     }
-    tcp_sessions = sessions;
 
+    tcp_sessions = sessions;
     tcp_sessions[tcp_sessions_len-1] = session;
+    
     spin_unlock(&tcp_lock);
 
     return TRUE;
@@ -100,7 +102,7 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 
             spin_unlock(&tcp_lock);
 
-            return FALSE;
+            return TRUE;
         }
     }
     spin_unlock(&tcp_lock);
@@ -114,14 +116,14 @@ int add_tcp_data(struct iphdr *iph, struct tcphdr *tcph) {
     struct tcp_session *session = get_tcp_session(iph, tcph);
     if (!session) {
         spin_unlock(&tcp_lock);
-        return FALSE;
+        return ERROR;
     }
 
     char *data = (char *)tcph + tcph->doff * 4;
     int data_len = ntohs(iph->tot_len)-((iph->ihl*4)+(tcph->doff*4));
     if (data_len <= 0) {
         spin_unlock(&tcp_lock);
-        return TRUE;
+        return ERROR;
     }
 
     int offset = ntohl(tcph->seq) - ntohl(session->init_seq);
@@ -129,8 +131,7 @@ int add_tcp_data(struct iphdr *iph, struct tcphdr *tcph) {
         session->buffer = krealloc(session->buffer, offset+data_len, GFP_ATOMIC);
         if (!session->buffer) {
             spin_unlock(&tcp_lock);
-
-            return FALSE;
+            return ERROR;
         }
 
         session->buffer_len = offset+data_len;
