@@ -1,5 +1,4 @@
 // syn도 시퀀스 번호가 1 증가한다고함
-
 #include <linux/kernel.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
@@ -31,14 +30,17 @@ void init_tcp_lock(void) {
 }
 
 void deinit_tcp_sessions(void) {
+    spin_lock(&tcp_lock);
+    
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = tcp_sessions[i];
         
         kfree(session->buffer);
         kfree(session);
     }
-    
     kfree(tcp_sessions);
+
+    spin_unlock(&tcp_lock);
 }
 
 int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
@@ -76,7 +78,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     return TRUE;
 }
 
-struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+static struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = tcp_sessions[i];
         if (session->saddr == iph->saddr && session->sport == tcph->source && session->dport == tcph->dest) {
