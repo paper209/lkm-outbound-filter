@@ -1,3 +1,5 @@
+// syn도 시퀀스 번호가 1 증가한다고함
+
 #include <linux/kernel.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
@@ -60,6 +62,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     if (!sessions) {
         kfree(session);
         tcp_sessions_len--;
+
         spin_unlock(&tcp_lock);
 
         return ERROR;
@@ -89,15 +92,17 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = tcp_sessions[i];
+        
         if (session->saddr == iph->saddr && session->sport == tcph->source && session->dport == tcph->dest) {
             kfree(session->buffer);
             kfree(session);
 
-            for (int j = i; j < tcp_sessions_len - 1; j++) {
-                tcp_sessions[j] = tcp_sessions[j + 1];
+            for (int j = i; j < tcp_sessions_len-1; j++) {
+                tcp_sessions[j] = tcp_sessions[j+1];
             }
             tcp_sessions_len--;
-            tcp_sessions = krealloc(tcp_sessions, sizeof(*tcp_sessions)*tcp_sessions_len, GFP_ATOMIC);
+            struct tcp_session **sessions = krealloc(tcp_sessions, sizeof(*tcp_sessions)*tcp_sessions_len, GFP_ATOMIC);
+            if (sessions) tcp_sessions = sessions;
 
             spin_unlock(&tcp_lock);
 
@@ -125,14 +130,15 @@ int add_tcp_data(struct iphdr *iph, struct tcphdr *tcph) {
         return ERROR;
     }
 
-    int offset = ntohl(tcph->seq) - ntohl(session->init_seq);
+    int offset = ntohl(tcph->seq)-ntohl(session->init_seq)-1;
     if (offset+data_len > session->buffer_len) {
-        session->buffer = krealloc(session->buffer, offset+data_len, GFP_ATOMIC);
-        if (!session->buffer) {
+        char *buffer = krealloc(session->buffer, offset+data_len, GFP_ATOMIC);
+        if (!buffer) {
             spin_unlock(&tcp_lock);
             return ERROR;
         }
 
+        session->buffer = buffer;
         session->buffer_len = offset+data_len;
     }
 
