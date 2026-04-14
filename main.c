@@ -15,18 +15,19 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
     if (iph->protocol == 6) {
         const struct tcphdr *tcph = tcp_hdr(skb);
         if (tcph->syn && !tcph->ack) {
+            printk(KERN_INFO "new tcp connection!!!!\n");
             if (!add_tcp_session(iph, tcph)) {
                 printk(KERN_ERR "add tcp session error!!\n");
                 return NF_ACCEPT;
             }
         } else if (tcph->fin) {
+            printk(KERN_INFO "tcp fin detected!!!\n");
             if (!remove_tcp_session(iph, tcph)) {
                 printk(KERN_ERR "remove tcp session error!!\n");
                 return NF_ACCEPT;
             }
         } else {
             if (!add_tcp_data(iph, tcph)) {
-                printk(KERN_ERR "add tcp data error!!\n");
                 return NF_ACCEPT;
             }
         }
