@@ -27,7 +27,7 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
                 return NF_ACCEPT;
             }
         } else {
-            if (!add_tcp_data(iph, tcph)) {
+            if (!add_tcp_data(skb, iph, tcph)) {
                 return NF_ACCEPT;
             }
         }
