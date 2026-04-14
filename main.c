@@ -12,24 +12,51 @@
 // [\x00\x00\x00\x01][id length (8 bits)][id (n bits)]
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
-    if (iph->protocol == 6) {
-        const struct tcphdr *tcph = tcp_hdr(skb);
-        if (tcph->syn && !tcph->ack) {
-            printk(KERN_INFO "new tcp connection!!!!\n");
-            if (!add_tcp_session(iph, tcph)) {
-                printk(KERN_ERR "add tcp session error!!\n");
-                return NF_ACCEPT;
+    switch (iph->protocol) {
+        case 6: {
+            const struct tcphdr *tcph = tcp_hdr(skb);
+            if (tcph->syn && !tcph->ack) {
+                switch (add_tcp_session(iph, tcph)) {
+                    case TCP_ALLOC_ERROR:
+                        printk(KERN_ERR "new tcp connection: alloc error.\n");
+                        break;
+                    case TCP_REALLOC_ERROR:
+                        printk(KERN_ERR "new tcp connection: realloc error.\n");
+                        break;
+                    default:
+                        printk(KERN_INFO "new tcp connection: added new tcp session.\n");
+                        break;
+                }
+            } else if (tcph->fin) {
+                switch (remove_tcp_session(iph, tcph)) {
+                    case TCP_SESSION_NOT_FOUND:
+                        printk(KERN_ERR "tcp fin flag detected: session not found.\n");
+                        break;
+                    default:
+                        printk(KERN_INFO "tcp fin flag detected: session deleted.\n");
+                        break;
+                }
+            } else {
+                switch (add_tcp_data(skb, iph, tcph)) {
+                    case TCP_SESSION_NOT_FOUND:
+                        //printk(KERN_ERR "tcp added: session not found.\n");
+                        break;
+                    case TCP_INVALID_LENGTH:
+                        printk(KERN_ERR "tcp added: invalid data length.\n");
+                        break;
+                    case TCP_REALLOC_ERROR:
+                        printk(KERN_ERR "tcp added: realloc error.\n");
+                        break;
+                    case TCP_BUFFER_COPY_ERROR:
+                        printk(KERN_ERR "tcp added: buffer copy error.\n");
+                        break;
+                    default:
+                        //printk(KERN_INFO "tcp added: successed.\n");
+                        break;
+                }
             }
-        } else if (tcph->fin) {
-            printk(KERN_INFO "tcp fin detected!!!\n");
-            if (!remove_tcp_session(iph, tcph)) {
-                printk(KERN_ERR "remove tcp session error!!\n");
-                return NF_ACCEPT;
-            }
-        } else {
-            if (!add_tcp_data(skb, iph, tcph)) {
-                return NF_ACCEPT;
-            }
+
+            break;
         }
     }
 
