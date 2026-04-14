@@ -3,6 +3,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/spinlock.h>
+#include <linux/skbuff.h>
 
 #define TRUE 1
 #define FALSE 0
@@ -116,7 +117,7 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     return FALSE;
 }
 
-int add_tcp_data(struct iphdr *iph, struct tcphdr *tcph) {
+int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
     
     struct tcp_session *session = get_tcp_session(iph, tcph);
@@ -124,8 +125,7 @@ int add_tcp_data(struct iphdr *iph, struct tcphdr *tcph) {
         spin_unlock(&tcp_lock);
         return ERROR;
     }
-
-    char *data = (char *)tcph + tcph->doff * 4;
+    
     int data_len = ntohs(iph->tot_len)-((iph->ihl*4)+(tcph->doff*4));
     if (data_len <= 0) {
         spin_unlock(&tcp_lock);
@@ -144,7 +144,11 @@ int add_tcp_data(struct iphdr *iph, struct tcphdr *tcph) {
         session->buffer_len = offset+data_len;
     }
 
-    memcpy(session->buffer+offset, data, data_len);
+    int data_offset = ((char *)tcph+tcph->doff*4)-(char *)skb->data;
+    if (skb_copy_bits(skb, data_offset, session->buffer+offset, data_len) < 0) {
+        spin_unlock(&tcp_lock);
+        return ERROR;
+    } 
     spin_unlock(&tcp_lock);
 
     return TRUE;
