@@ -5,9 +5,9 @@
 #include <linux/spinlock.h>
 #include <linux/skbuff.h>
 
+#include "tcp.h"
+
 #define TRUE 1
-#define FALSE 0
-#define ERROR -1
 
 struct tcp_session {
     __be32 saddr;
@@ -19,7 +19,6 @@ struct tcp_session {
     char *buffer;
     int buffer_len;
 };
-
 
 struct tcp_session **tcp_sessions = NULL;
 int tcp_sessions_len = 0;
@@ -50,7 +49,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     struct tcp_session *session = kmalloc(sizeof(struct tcp_session), GFP_ATOMIC);
     if (!session) {
         spin_unlock(&tcp_lock);
-        return ERROR;
+        return TCP_ALLOC_ERROR;
     }
 
     session->saddr = iph->saddr;
@@ -68,7 +67,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 
         spin_unlock(&tcp_lock);
 
-        return ERROR;
+        return TCP_REALLOC_ERROR;
     }
 
     tcp_sessions = sessions;
@@ -114,7 +113,7 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     }
     spin_unlock(&tcp_lock);
 
-    return FALSE;
+    return TCP_SESSION_NOT_FOUND;
 }
 
 int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
@@ -123,13 +122,13 @@ int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
     struct tcp_session *session = get_tcp_session(iph, tcph);
     if (!session) {
         spin_unlock(&tcp_lock);
-        return ERROR;
+        return TCP_SESSION_NOT_FOUND;
     }
     
     int data_len = ntohs(iph->tot_len)-((iph->ihl*4)+(tcph->doff*4));
     if (data_len <= 0) {
         spin_unlock(&tcp_lock);
-        return ERROR;
+        return TCP_INVALID_LENGTH;
     }
 
     int offset = ntohl(tcph->seq)-ntohl(session->init_seq)-1;
@@ -137,7 +136,7 @@ int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
         char *buffer = krealloc(session->buffer, offset+data_len, GFP_ATOMIC);
         if (!buffer) {
             spin_unlock(&tcp_lock);
-            return ERROR;
+            return TCP_REALLOC_ERROR;
         }
 
         session->buffer = buffer;
@@ -147,7 +146,7 @@ int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
     int data_offset = ((char *)tcph+tcph->doff*4)-(char *)skb->data;
     if (skb_copy_bits(skb, data_offset, session->buffer+offset, data_len) < 0) {
         spin_unlock(&tcp_lock);
-        return ERROR;
+        return TCP_BUFFER_COPY_ERROR;
     } 
     spin_unlock(&tcp_lock);
 
