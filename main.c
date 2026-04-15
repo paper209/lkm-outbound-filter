@@ -23,35 +23,16 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
                     case TCP_REALLOC_ERROR:
                         printk(KERN_ERR "new tcp connection: realloc error.\n");
                         break;
-                    default:
-                        printk(KERN_INFO "new tcp connection: added new tcp session.\n");
-                        break;
                 }
             } else if (tcph->fin) {
-                switch (remove_tcp_session(iph, tcph)) {
-                    case TCP_SESSION_NOT_FOUND:
-                        printk(KERN_ERR "tcp fin flag detected: session not found.\n");
-                        break;
-                    default:
-                        printk(KERN_INFO "tcp fin flag detected: session deleted.\n");
-                        break;
-                }
+                remove_tcp_session(iph, tcph)
             } else {
                 switch (add_tcp_data(skb, iph, tcph)) {
-                    case TCP_SESSION_NOT_FOUND:
-                        //printk(KERN_ERR "tcp added: session not found.\n");
-                        break;
-                    case TCP_INVALID_LENGTH:
-                        printk(KERN_ERR "tcp added: invalid data length.\n");
-                        break;
                     case TCP_REALLOC_ERROR:
                         printk(KERN_ERR "tcp added: realloc error.\n");
                         break;
                     case TCP_BUFFER_COPY_ERROR:
                         printk(KERN_ERR "tcp added: buffer copy error.\n");
-                        break;
-                    default:
-                        //printk(KERN_INFO "tcp added: successed.\n");
                         break;
                 }
             }
