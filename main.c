@@ -18,10 +18,10 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
             if (tcph->syn && !tcph->ack) {
                 switch (add_tcp_session(iph, tcph)) {
                     case TCP_ALLOC_ERROR:
-                        printk(KERN_ERR "new tcp connection: alloc error.\n");
+                        printk(KERN_ERR "tcp new connection error: alloc\n");
                         break;
                     case TCP_REALLOC_ERROR:
-                        printk(KERN_ERR "new tcp connection: realloc error.\n");
+                        printk(KERN_ERR "tcp new connection error: realloc\n");
                         break;
                 }
             } else if (tcph->fin) {
@@ -29,10 +29,10 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
             } else {
                 switch (add_tcp_data(skb, iph, tcph)) {
                     case TCP_REALLOC_ERROR:
-                        printk(KERN_ERR "tcp added: realloc error.\n");
+                        printk(KERN_ERR "tcp add data error: realloc\n");
                         break;
                     case TCP_BUFFER_COPY_ERROR:
-                        printk(KERN_ERR "tcp added: buffer copy error.\n");
+                        printk(KERN_ERR "tcp add data error: buffer copy\n");
                         break;
                 }
             }
@@ -54,7 +54,7 @@ const struct nf_hook_ops nfho = {
 int init(void) {
     init_tcp_lock();
     nf_register_net_hook(&init_net, &nfho);
-    printk(KERN_INFO "i'm loaded!!!\n");
+    printk(KERN_INFO "outbound filter is loaded.\n");
 
     return 0;
 }
@@ -63,7 +63,7 @@ void deinit(void) {
     nf_unregister_net_hook(&init_net, &nfho);
     deinit_tcp_sessions();
     
-    printk(KERN_INFO "i'm unloaded!\n");
+    printk(KERN_INFO "outbound filter is unloaded.\n");
 }
 
 module_init(init);
