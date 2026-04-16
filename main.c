@@ -35,6 +35,7 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
                 }
 
                 kfree(data_buffer);
+                return NF_DROP;
             }
 
             break;
