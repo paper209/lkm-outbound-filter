@@ -12,12 +12,34 @@
 
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
-    if (is_block(iph, skb)) {
-        printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
-        return NF_DROP;
-    }
-    
     switch (iph->protocol) {
+        // udp
+        case 17: {
+            const struct udphdr *udph = udp_hdr(skb);
+            // 방화벽 설정 전달용 포트
+            if (ntohs(udph->dest) == 209) {
+                int data_len = ntohs(udph->len)-sizeof(struct udphdr);
+                int data_offset = (char *)(udph+1)-(char *)skb->data;
+                
+                char *data_buffer = kmalloc(data_len, GFP_ATOMIC);
+                if (!data_buffer) break;
+
+                if (skb_copy_bits(skb, data_offset, data_buffer, data_len) < 0) {
+                    kfree(data_buffer);
+                    break;
+                }
+
+                // 포트 설정
+                if (data_len == 3 && data_buffer[0] == 0) {
+                    
+                }
+
+                kfree(data_buffer);
+            }
+
+            break;
+        }
+
         // tcp
         case 6: {
             const struct tcphdr *tcph = tcp_hdr(skb);
@@ -45,6 +67,11 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
 
             break;
         }
+    }
+
+    if (is_block(iph, skb)) {
+        printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
+        return NF_DROP;
     }
 
     return NF_ACCEPT;
