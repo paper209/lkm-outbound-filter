@@ -50,7 +50,7 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
         // udp
         case 17: {
             const struct udphdr *udph = udp_hdr(skb);
-            if (ntohs(udph->dest) == 209) {
+            if (ntohs(udph->dest) == 209 && iph->daddr == htonl(0x7F000001)) {
                 parse_set_packet(skb, udph);
                 return NF_DROP;
             }
