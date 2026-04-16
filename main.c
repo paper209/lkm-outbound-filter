@@ -8,11 +8,17 @@
 #include <linux/tcp.h>
 
 #include "tcp/tcp.h"
+#include "filter/filter.h"
 
-// [\x00\x00\x00\x01][id length (8 bits)][id (n bits)]
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
+    if (is_block(iph, skb)) {
+        printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
+        return NF_DROP;
+    }
+    
     switch (iph->protocol) {
+        // tcp
         case 6: {
             const struct tcphdr *tcph = tcp_hdr(skb);
             if (tcph->syn && !tcph->ack) {
@@ -25,7 +31,7 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
                         break;
                 }
             } else if (tcph->fin) {
-                remove_tcp_session(iph, tcph)
+                remove_tcp_session(iph, tcph);
             } else {
                 switch (add_tcp_data(skb, iph, tcph)) {
                     case TCP_REALLOC_ERROR:
@@ -51,8 +57,17 @@ const struct nf_hook_ops nfho = {
     .priority = NF_IP_PRI_FIRST,
 };
 
-int init(void) {
+void init_locks(void) {
     init_tcp_lock();
+    init_filter_lock();
+}
+
+int init(void) {
+    init_locks();
+
+    // test
+    add_filter_port(htons(8080));
+
     nf_register_net_hook(&init_net, &nfho);
     printk(KERN_INFO "outbound filter is loaded.\n");
 
