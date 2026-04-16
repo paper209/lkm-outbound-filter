@@ -131,6 +131,8 @@ int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
     }
 
     int offset = ntohl(tcph->seq)-ntohl(session->init_seq)-1;
+    if (offset < 0) offset = 0;
+    
     if (offset+data_len > session->buffer_len) {
         char *buffer = krealloc(session->buffer, offset+data_len, GFP_ATOMIC);
         if (!buffer) {
