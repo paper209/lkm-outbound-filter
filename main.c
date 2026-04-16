@@ -6,9 +6,43 @@
 #include <linux/net_namespace.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
+#include <linux/udp.h>
 
 #include "tcp/tcp.h"
 #include "filter/filter.h"
+
+#define SET_PORT_FILTER 0
+
+void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
+    int data_len = ntohs(udph->len)-sizeof(struct udphdr);
+    if (data_len < 1) return;
+    
+    char *data_buffer = kmalloc(data_len, GFP_ATOMIC);
+    if (!data_buffer) return;
+
+    int data_offset = (char *)(udph+1)-(char *)skb->data;
+    if (skb_copy_bits(skb, data_offset, data_buffer, data_len) < 0) {
+        kfree(data_buffer);
+        return;
+    }
+
+    switch (data_buffer[0]) {
+        case SET_PORT_FILTER: {
+            if (data_len == 3) {
+                __be16 port;
+                memcpy(&port, data_buffer + 1, sizeof(port));
+
+                if (add_filter_port(port) == FILTER_REALLOC_ERROR) {
+                    printk(KERN_ERR "set port filter error: realloc\n");
+                }
+            }
+
+            break;
+        }
+    }
+
+    kfree(data_buffer); 
+}
 
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
@@ -16,25 +50,8 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
         // udp
         case 17: {
             const struct udphdr *udph = udp_hdr(skb);
-            // 방화벽 설정 전달용 포트
             if (ntohs(udph->dest) == 209) {
-                int data_len = ntohs(udph->len)-sizeof(struct udphdr);
-                int data_offset = (char *)(udph+1)-(char *)skb->data;
-                
-                char *data_buffer = kmalloc(data_len, GFP_ATOMIC);
-                if (!data_buffer) break;
-
-                if (skb_copy_bits(skb, data_offset, data_buffer, data_len) < 0) {
-                    kfree(data_buffer);
-                    break;
-                }
-
-                // 포트 설정
-                if (data_len == 3 && data_buffer[0] == 0) {
-                    
-                }
-
-                kfree(data_buffer);
+                parse_set_packet(skb, udph);
                 return NF_DROP;
             }
 
@@ -92,10 +109,6 @@ void init_locks(void) {
 
 int init(void) {
     init_locks();
-
-    // test
-    add_filter_port(htons(8080));
-
     nf_register_net_hook(&init_net, &nfho);
     printk(KERN_INFO "outbound filter is loaded.\n");
 
