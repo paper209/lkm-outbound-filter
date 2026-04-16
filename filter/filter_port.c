@@ -22,6 +22,7 @@ bool is_block_port(__be16 port) {
 int add_filter_port(__be16 port) {
     spin_lock(&filter_lock);
 
+    printk(KERN_INFO "added port filter: %d\n", ntohs(port));
     __be16 *ports = krealloc(block_ports, sizeof(__be16)*++block_ports_len, GFP_ATOMIC);
     if (!ports) {
         block_ports_len--;
