@@ -11,7 +11,9 @@
 #include "tcp/tcp.h"
 #include "filter/filter.h"
 
-#define SET_PORT_FILTER 0
+enum {
+    SET_PORT_FILTER = 0,
+};
 
 void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
     int data_len = ntohs(udph->len)-sizeof(struct udphdr);
