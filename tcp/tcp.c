@@ -1,4 +1,3 @@
-// syn도 시퀀스 번호가 1 증가한다고함
 #include <linux/kernel.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
@@ -10,7 +9,7 @@
 #define TRUE 1
 
 struct tcp_session {
-    __be32 saddr;
+    __be32 daddr;
     __be16 sport;
     __be16 dport;
 
@@ -52,7 +51,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
         return TCP_ALLOC_ERROR;
     }
 
-    session->saddr = iph->saddr;
+    session->daddr = iph->daddr;
     session->sport = tcph->source;
     session->dport = tcph->dest;
     session->init_seq = tcph->seq;
@@ -81,7 +80,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 static struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = tcp_sessions[i];
-        if (session->saddr == iph->saddr && session->sport == tcph->source && session->dport == tcph->dest) {
+        if (session->daddr == iph->daddr && session->sport == tcph->source && session->dport == tcph->dest) {
             return session;
         }
     }
@@ -95,7 +94,7 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = tcp_sessions[i];
         
-        if (session->saddr == iph->saddr && session->sport == tcph->source && session->dport == tcph->dest) {
+        if (session->daddr == iph->daddr && session->sport == tcph->source && session->dport == tcph->dest) {
             kfree(session->buffer);
             kfree(session);
 
