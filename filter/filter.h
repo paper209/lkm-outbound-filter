@@ -5,7 +5,9 @@
 
 #include "filter_port.h"
 
-#define FILTER_REALLOC_ERROR -1
+enum {
+    FILTER_REALLOC_ERROR = -1,
+};
 
 extern spinlock_t filter_lock;
 
