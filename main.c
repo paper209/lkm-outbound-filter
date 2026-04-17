@@ -13,7 +13,10 @@
 
 enum {
     SET_PORT_FILTER = 0,
-    SET_ADDR_FILTER = 1,
+    REMOVE_PORT_FILTER = 1,
+
+    SET_ADDR_FILTER = 2,
+    REMOVE_ADDR_FILTER = 3,
 };
 
 void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
@@ -30,25 +33,40 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
     }
 
     switch (data_buffer[0]) {
+        case REMOVE_PORT_FILTER:
         case SET_PORT_FILTER: {
             if (data_len == 3) {
                 __be16 port;
                 memcpy(&port, data_buffer + 1, sizeof(port));
 
-                if (add_port_filter(port) == FILTER_REALLOC_ERROR) {
-                    printk(KERN_ERR "set port filter error: realloc\n");
+                if (data_buffer[0] == SET_PORT_FILTER) {
+                    if (add_port_filter(port) == FILTER_REALLOC_ERROR) {
+                        printk(KERN_ERR "set port filter error: realloc\n");
+                    }
+                } else {
+                    if (remove_port_filter(port) == FILTER_REALLOC_ERROR) {
+                        printk(KERN_ERR "remove port filter error: realloc\n");
+                    }
                 }
             }
 
             break;
         }
+
+        case REMOVE_ADDR_FILTER:
         case SET_ADDR_FILTER: {
             if (data_len == 5) {
                 __be32 address;
                 memcpy(&address, data_buffer+1, sizeof(address));
 
-                if (add_address_filter(address) == FILTER_REALLOC_ERROR) {
-                    printk(KERN_ERR "set address filter error: realloc\n");
+                if (data_buffer[0] == SET_ADDR_FILTER) {
+                    if (add_address_filter(address) == FILTER_REALLOC_ERROR) {
+                        printk(KERN_ERR "set address filter error: realloc\n");
+                    }
+                } else {
+                    if (remove_address_filter(address) == FILTER_REALLOC_ERROR) {
+                        printk(KERN_ERR "remove address filter error: realloc\n");
+                    }
                 }
             }
 
