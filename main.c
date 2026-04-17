@@ -48,6 +48,11 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
 
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
+    if (is_block_port(iph, skb)) {
+        printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
+        return NF_DROP;
+    }
+    
     switch (iph->protocol) {
         // udp
         case 17: {
@@ -87,11 +92,6 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
 
             break;
         }
-    }
-
-    if (is_block(iph, skb)) {
-        printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
-        return NF_DROP;
     }
 
     return NF_ACCEPT;
