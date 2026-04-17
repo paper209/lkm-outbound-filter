@@ -4,6 +4,7 @@
 #include "linux/spinlock.h"
 
 #include "filter_port.h"
+#include "filter_address.h"
 
 enum {
     FILTER_REALLOC_ERROR = -1,
