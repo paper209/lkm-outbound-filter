@@ -1,12 +1,26 @@
 #include <linux/kernel.h>
 #include <linux/types.h>
+#include <linux/skbuff.h>
+#include <linux/ip.h>
+#include <linux/tcp.h>
 
 #include "filter.h"
 
 __be16 *block_ports = NULL;
 unsigned int block_ports_len = 0;
 
-bool is_block_port(__be16 port) {
+bool is_block_port(struct iphdr *iph, struct sk_buff *skb) {
+    __be16 port;
+    switch (iph->protocol) {
+        case 6: {
+            const struct tcphdr *tcph = tcp_hdr(skb);
+            port = tcph->dest;
+
+            break;
+        }
+        default: return false;
+    }
+    
     spin_lock(&filter_lock);
     for (int i = 0; i < block_ports_len; i++) {
         if (block_ports[i] == port) {
