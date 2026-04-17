@@ -12,6 +12,7 @@ enum {
 
 extern spinlock_t filter_lock;
 
+void deinit_filter(void);
 void init_filter_lock(void);
 
 #endif
