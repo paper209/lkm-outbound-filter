@@ -132,6 +132,8 @@ int init(void) {
 
 void deinit(void) {
     nf_unregister_net_hook(&init_net, &nfho);
+    
+    deinit_filter();
     deinit_tcp_sessions();
     
     printk(KERN_INFO "outbound filter is unloaded.\n");
