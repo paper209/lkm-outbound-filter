@@ -7,6 +7,12 @@
 __be32 *block_addrs = NULL;
 unsigned int block_addrs_len = 0;
 
+void deinit_block_address(void) {
+    spin_lock(&filter_lock);
+    kfree(block_addrs);
+    spin_unlock(&filter_lock);
+}
+
 bool is_block_address(struct iphdr *iph) {
     spin_lock(&filter_lock);
     for (int i = 0; i < block_addrs_len; i++) {
