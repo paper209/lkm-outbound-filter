@@ -1,5 +1,5 @@
 obj-m += filter.o
-filter-objs := main.o tcp/tcp.o filter/filter.o filter/filter_port.o
+filter-objs := main.o tcp/tcp.o filter/filter.o filter/filter_port.o filter/filter_address.o
 
 KDIR := /lib/modules/$(shell uname -r)/build
 PWD  := $(shell pwd)
