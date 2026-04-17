@@ -33,7 +33,7 @@ bool is_block_port(struct iphdr *iph, struct sk_buff *skb) {
     return false;
 }
 
-int add_filter_port(__be16 port) {
+int add_port_filter(__be16 port) {
     spin_lock(&filter_lock);
 
     printk(KERN_INFO "added port filter: %d\n", ntohs(port));
@@ -52,7 +52,7 @@ int add_filter_port(__be16 port) {
     return 0;
 }
 
-int remove_filter_port(__be16 port) {
+int remove_port_filter(__be16 port) {
     spin_lock(&filter_lock);
 
     for (int i = 0; i < block_ports_len; i++) {
