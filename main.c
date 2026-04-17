@@ -13,7 +13,7 @@
 
 enum {
     SET_PORT_FILTER = 0,
-    SET_ADDR_FILTER
+    SET_ADDR_FILTER = 1,
 };
 
 void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
