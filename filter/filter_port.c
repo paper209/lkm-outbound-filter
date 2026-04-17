@@ -42,7 +42,6 @@ bool is_block_port(struct iphdr *iph, struct sk_buff *skb) {
 int add_port_filter(__be16 port) {
     spin_lock(&filter_lock);
 
-    printk(KERN_INFO "added port filter: %d\n", ntohs(port));
     __be16 *ports = krealloc(block_ports, sizeof(__be16)*++block_ports_len, GFP_ATOMIC);
     if (!ports) {
         block_ports_len--;
@@ -51,8 +50,10 @@ int add_port_filter(__be16 port) {
         return FILTER_REALLOC_ERROR;
     }
     block_ports = ports;
-    
+
     block_ports[block_ports_len-1] = port;
+    printk(KERN_INFO "added port filter: %d\n", ntohs(port));
+    
     spin_unlock(&filter_lock);
     
     return 0;
@@ -79,7 +80,8 @@ int remove_port_filter(__be16 port) {
             break;
         }
     }
-
+    printk(KERN_INFO "removed port filter: %d\n", ntohs(port));
+    
     spin_unlock(&filter_lock);
     return 0;
 }
