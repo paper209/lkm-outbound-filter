@@ -23,7 +23,7 @@ bool is_block_address(struct iphdr *iph) {
 int add_address_filter(__be32 address) {
     spin_lock(&filter_lock);
 
-    printk(KERN_INFO "added address filter: %pI4\n", address);
+    printk(KERN_INFO "added address filter: %pI4\n", &address);
     __be32 *addrs = krealloc(block_addrs, sizeof(__be32)*++block_addrs_len, GFP_ATOMIC);
     if (!addrs) {
         block_addrs_len--;
