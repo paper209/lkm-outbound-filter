@@ -13,6 +13,7 @@
 
 enum {
     SET_PORT_FILTER = 0,
+    SET_ADDR_FILTER
 };
 
 void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
@@ -34,8 +35,20 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
                 __be16 port;
                 memcpy(&port, data_buffer + 1, sizeof(port));
 
-                if (add_filter_port(port) == FILTER_REALLOC_ERROR) {
+                if (add_port_filter(port) == FILTER_REALLOC_ERROR) {
                     printk(KERN_ERR "set port filter error: realloc\n");
+                }
+            }
+
+            break;
+        }
+        case SET_ADDR_FILTER: {
+            if (data_len == 5) {
+                __be32 address;
+                memcpy(&address, data_buffer+1, sizeof(address));
+
+                if (add_address_filter(address) == FILTER_REALLOC_ERROR) {
+                    printk(KERN_ERR "set address filter error: realloc\n");
                 }
             }
 
@@ -48,7 +61,7 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
 
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
-    if (is_block_port(iph, skb)) {
+    if (is_block_port(iph, skb) || is_block_address(iph)) {
         printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
         return NF_DROP;
     }
