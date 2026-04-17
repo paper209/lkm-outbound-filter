@@ -9,6 +9,12 @@
 __be16 *block_ports = NULL;
 unsigned int block_ports_len = 0;
 
+void deinit_block_ports(void) {
+    spin_lock(&filter_lock);
+    kfree(block_ports);
+    spin_unlock(&filter_lock);
+}
+
 bool is_block_port(struct iphdr *iph, struct sk_buff *skb) {
     __be16 port;
     switch (iph->protocol) {
