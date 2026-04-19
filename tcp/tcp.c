@@ -19,7 +19,7 @@ struct tcp_session {
     int buffer_len;
 };
 
-struct tcp_session **tcp_sessions = NULL;
+struct tcp_session *tcp_sessions = NULL;
 int tcp_sessions_len = 0;
 
 spinlock_t tcp_lock;
@@ -30,48 +30,36 @@ void init_tcp_lock(void) {
 
 void deinit_tcp_sessions(void) {
     spin_lock(&tcp_lock);
-    
+
     for (int i = 0; i < tcp_sessions_len; i++) {
-        struct tcp_session *session = tcp_sessions[i];
-        
+        struct tcp_session *session = &tcp_sessions[i];    
         kfree(session->buffer);
-        kfree(session);
     }
     kfree(tcp_sessions);
-
+    
     spin_unlock(&tcp_lock);
 }
 
 int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
 
-    struct tcp_session *session = kmalloc(sizeof(struct tcp_session), GFP_ATOMIC);
-    if (!session) {
-        spin_unlock(&tcp_lock);
-        return TCP_ALLOC_ERROR;
-    }
-
-    session->daddr = iph->daddr;
-    session->sport = tcph->source;
-    session->dport = tcph->dest;
-    session->init_seq = tcph->seq;
-
-    session->buffer = NULL;
-    session->buffer_len = 0;
-
-    struct tcp_session **sessions = krealloc(tcp_sessions, sizeof(*tcp_sessions)*(++tcp_sessions_len), GFP_ATOMIC);
+    struct tcp_session *sessions = krealloc(tcp_sessions, sizeof(struct tcp_session)*++tcp_sessions_len, GFP_ATOMIC);
     if (!sessions) {
-        kfree(session);
         tcp_sessions_len--;
-
         spin_unlock(&tcp_lock);
 
         return TCP_REALLOC_ERROR;
     }
-
     tcp_sessions = sessions;
-    tcp_sessions[tcp_sessions_len-1] = session;
     
+    tcp_sessions[tcp_sessions_len-1] = (struct tcp_session){
+        .daddr = iph->daddr,
+        .sport = tcph->source,
+        .dport = tcph->dest,
+        .init_seq = tcph->seq,
+        .buffer = NULL,
+        .buffer_len = 0,
+    };
     spin_unlock(&tcp_lock);
 
     return TRUE;
@@ -79,7 +67,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 
 static struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     for (int i = 0; i < tcp_sessions_len; i++) {
-        struct tcp_session *session = tcp_sessions[i];
+        struct tcp_session *session = &tcp_sessions[i];
         if (session->daddr == iph->daddr && session->sport == tcph->source && session->dport == tcph->dest) {
             return session;
         }
@@ -92,17 +80,16 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
 
     for (int i = 0; i < tcp_sessions_len; i++) {
-        struct tcp_session *session = tcp_sessions[i];
+        struct tcp_session *session = &tcp_sessions[i];
         
         if (session->daddr == iph->daddr && session->sport == tcph->source && session->dport == tcph->dest) {
             kfree(session->buffer);
-            kfree(session);
 
             for (int j = i; j < tcp_sessions_len-1; j++) {
                 tcp_sessions[j] = tcp_sessions[j+1];
             }
             tcp_sessions_len--;
-            struct tcp_session **sessions = krealloc(tcp_sessions, sizeof(*tcp_sessions)*tcp_sessions_len, GFP_ATOMIC);
+            struct tcp_session *sessions = krealloc(tcp_sessions, sizeof(struct tcp_session)*tcp_sessions_len, GFP_ATOMIC);
             if (sessions) tcp_sessions = sessions;
 
             spin_unlock(&tcp_lock);
