@@ -6,16 +6,16 @@
 
 #include "filter.h"
 
-__be16 *block_ports = NULL;
-unsigned int block_ports_len = 0;
+__be16 *port_filters = NULL;
+unsigned int port_filters_len = 0;
 
-void deinit_block_ports(void) {
+void deinit_port_filter(void) {
     spin_lock(&filter_lock);
-    kfree(block_ports);
+    kfree(port_filters);
     spin_unlock(&filter_lock);
 }
 
-bool is_block_port(struct iphdr *iph, struct sk_buff *skb) {
+bool port_filter(struct iphdr *iph, struct sk_buff *skb) {
     __be16 port;
     switch (iph->protocol) {
         case 6: {
@@ -28,8 +28,8 @@ bool is_block_port(struct iphdr *iph, struct sk_buff *skb) {
     }
     
     spin_lock(&filter_lock);
-    for (int i = 0; i < block_ports_len; i++) {
-        if (block_ports[i] == port) {
+    for (int i = 0; i < port_filters_len; i++) {
+        if (port_filters[i] == port) {
             spin_unlock(&filter_lock);
             return true;
         } 
@@ -42,16 +42,16 @@ bool is_block_port(struct iphdr *iph, struct sk_buff *skb) {
 int add_port_filter(__be16 port) {
     spin_lock(&filter_lock);
 
-    __be16 *ports = krealloc(block_ports, sizeof(__be16)*++block_ports_len, GFP_ATOMIC);
+    __be16 *ports = krealloc(port_filters, sizeof(__be16)*++port_filters_len, GFP_ATOMIC);
     if (!ports) {
-        block_ports_len--;
+        port_filters_len--;
         spin_unlock(&filter_lock);
 
         return FILTER_REALLOC_ERROR;
     }
-    block_ports = ports;
+    port_filters = ports;
 
-    block_ports[block_ports_len-1] = port;
+    port_filters[port_filters_len-1] = port;
     printk(KERN_INFO "added port filter: %d\n", ntohs(port));
     
     spin_unlock(&filter_lock);
@@ -62,20 +62,20 @@ int add_port_filter(__be16 port) {
 int remove_port_filter(__be16 port) {
     spin_lock(&filter_lock);
 
-    for (int i = 0; i < block_ports_len; i++) {
-        if (block_ports[i] == port) {
-            block_ports_len--;
-            for (int j = i; j < block_ports_len; j++) {
-                block_ports[j] = block_ports[j+1];
+    for (int i = 0; i < port_filters_len; i++) {
+        if (port_filters[i] == port) {
+            port_filters_len--;
+            for (int j = i; j < port_filters_len; j++) {
+                port_filters[j] = port_filters[j+1];
             }
 
-            __be16 *ports = krealloc(block_ports, sizeof(__be16)*block_ports_len, GFP_ATOMIC);
+            __be16 *ports = krealloc(port_filters, sizeof(__be16)*port_filters_len, GFP_ATOMIC);
             if (!ports) {
                 spin_unlock(&filter_lock);
 
                 return FILTER_REALLOC_ERROR;
             }
-            block_ports = ports;
+            port_filters = ports;
 
             break;
         }
