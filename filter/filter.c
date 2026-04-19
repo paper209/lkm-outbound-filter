@@ -10,6 +10,6 @@ void init_filter_lock(void) {
 }
 
 void deinit_filter(void) {
-    deinit_block_ports();
-    deinit_block_address();
+    deinit_port_filter();
+    deinit_netmask_filter();
 }
