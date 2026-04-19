@@ -15,8 +15,8 @@ enum {
     SET_PORT_FILTER = 0,
     REMOVE_PORT_FILTER = 1,
 
-    SET_ADDR_FILTER = 2,
-    REMOVE_ADDR_FILTER = 3,
+    SET_NETMASK_FILTER = 2,
+    REMOVE_NETMASK_FILTER = 3,
 };
 
 void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
@@ -33,6 +33,7 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
     }
 
     switch (data_buffer[0]) {
+        // [type(1byte)][port(2byte)]
         case REMOVE_PORT_FILTER:
         case SET_PORT_FILTER: {
             if (data_len == 3) {
@@ -53,18 +54,20 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
             break;
         }
 
-        case REMOVE_ADDR_FILTER:
-        case SET_ADDR_FILTER: {
-            if (data_len == 5) {
-                __be32 address;
+        // [type(1byte)][address(4byte)][mask(4byte)]
+        case REMOVE_NETMASK_FILTER:
+        case SET_NETMASK_FILTER: {
+            if (data_len == 9) {
+                __be32 address, mask;
                 memcpy(&address, data_buffer+1, sizeof(address));
+                memcpy(&mask, data_buffer+5, sizeof(mask));
 
-                if (data_buffer[0] == SET_ADDR_FILTER) {
-                    if (add_address_filter(address) == FILTER_REALLOC_ERROR) {
+                if (data_buffer[0] == SET_NETMASK_FILTER) {
+                    if (add_netmask_filter(address, mask) == FILTER_REALLOC_ERROR) {
                         printk(KERN_ERR "set address filter error: realloc\n");
                     }
                 } else {
-                    if (remove_address_filter(address) == FILTER_REALLOC_ERROR) {
+                    if (remove_netmask_filter(address, mask) == FILTER_REALLOC_ERROR) {
                         printk(KERN_ERR "remove address filter error: realloc\n");
                     }
                 }
@@ -79,7 +82,7 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
 
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
-    if (is_block_port(iph, skb) || is_block_address(iph)) {
+    if (port_filter(iph, skb) || netmask_filter(iph)) {
         printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
         return NF_DROP;
     }
