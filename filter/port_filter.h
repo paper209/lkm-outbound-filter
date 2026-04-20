@@ -6,7 +6,7 @@
 
 void deinit_port_filter(void);
 bool port_filter(struct iphdr *iph, struct sk_buff *skb);
-int add_port_filter(__be16 port);
-int remove_port_filter(__be16 port);
+int add_port_filter(__be16 port, __u8 protocol);
+int remove_port_filter(__be16 port, __u8 protocol);
 
 #endif
