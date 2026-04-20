@@ -33,19 +33,22 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
     }
 
     switch (data_buffer[0]) {
-        // [type(1byte)][port(2byte)]
+        // [type(1byte)][protocol (1byte)][port(2byte)]
         case REMOVE_PORT_FILTER:
         case SET_PORT_FILTER: {
-            if (data_len == 3) {
+            if (data_len == 4) {
+                __u8 protocol;
+                memcpy(&protocol, data_buffer+1, sizeof(protocol));
+
                 __be16 port;
-                memcpy(&port, data_buffer + 1, sizeof(port));
+                memcpy(&port, data_buffer+2, sizeof(port));
 
                 if (data_buffer[0] == SET_PORT_FILTER) {
-                    if (add_port_filter(port) == FILTER_REALLOC_ERROR) {
+                    if (add_port_filter(port, protocol) == FILTER_REALLOC_ERROR) {
                         printk(KERN_ERR "set port filter error: realloc\n");
                     }
                 } else {
-                    if (remove_port_filter(port) == FILTER_REALLOC_ERROR) {
+                    if (remove_port_filter(port, protocol) == FILTER_REALLOC_ERROR) {
                         printk(KERN_ERR "remove port filter error: realloc\n");
                     }
                 }
