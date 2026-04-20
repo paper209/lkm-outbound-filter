@@ -4,12 +4,12 @@
 
 #include "filter.h"
 
-struct netmask {
+struct filter {
     __be32 address;
     __be32 mask;
 };
 
-struct netmask *netmask_filters = NULL;
+struct filter *netmask_filters = NULL;
 unsigned int netmask_filters_len = 0;
 
 void deinit_netmask_filter(void) {
@@ -21,7 +21,7 @@ void deinit_netmask_filter(void) {
 bool netmask_filter(struct iphdr *iph) {
     spin_lock(&filter_lock);
     for (int i = 0; i < netmask_filters_len; i++) {
-        struct netmask *filter = &netmask_filters[i];
+        struct filter *filter = &netmask_filters[i];
         if ((filter->address&filter->mask) == (iph->daddr&filter->mask)) {
             spin_unlock(&filter_lock);
             return true;
@@ -35,7 +35,7 @@ bool netmask_filter(struct iphdr *iph) {
 int add_netmask_filter(__be32 address, __be32 mask) {
     spin_lock(&filter_lock);
 
-    struct netmask *filters = krealloc(netmask_filters, sizeof(struct netmask)*++netmask_filters_len, GFP_ATOMIC);
+    struct filter *filters = krealloc(netmask_filters, sizeof(struct filter)*++netmask_filters_len, GFP_ATOMIC);
     if (!filters) {
         netmask_filters_len--;
         spin_unlock(&filter_lock);
@@ -43,7 +43,7 @@ int add_netmask_filter(__be32 address, __be32 mask) {
         return FILTER_REALLOC_ERROR;
     }
     netmask_filters = filters;
-    netmask_filters[netmask_filters_len-1] = (struct netmask){
+    netmask_filters[netmask_filters_len-1] = (struct filter){
         .address = address,
         .mask = mask,
     };
@@ -59,14 +59,14 @@ int remove_netmask_filter(__be32 address, __be32 mask) {
     spin_lock(&filter_lock);
 
     for (int i = 0; i < netmask_filters_len; i++) {
-        struct netmask *filter = &netmask_filters[i];
+        struct filter *filter = &netmask_filters[i];
         if (filter->address == address && filter->mask == mask) {
             netmask_filters_len--;
             for (int j = i; j < netmask_filters_len; j++) {
                 netmask_filters[j] = netmask_filters[j+1];
             }
 
-            struct netmask *filters = krealloc(netmask_filters, sizeof(struct netmask)*netmask_filters_len, GFP_ATOMIC);
+            struct filter *filters = krealloc(netmask_filters, sizeof(struct filter)*netmask_filters_len, GFP_ATOMIC);
             if (!filters) {
                 netmask_filters_len++;
                 spin_unlock(&filter_lock);
