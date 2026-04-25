@@ -17,6 +17,9 @@ enum {
 
     SET_NETMASK_FILTER = 2,
     REMOVE_NETMASK_FILTER = 3,
+
+    SET_SIGNATURE_FILETER = 4,
+    REMOVE_SIGNATURE_FILTER = 5,
 };
 
 void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
@@ -78,6 +81,27 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
 
             break;
         }
+
+        // [type(1byte)][signature[nbyte]]
+        case REMOVE_SIGNATURE_FILTER:
+        case SET_SIGNATURE_FILETER: {
+            if (1 < data_len) {
+                char *signature = data_buffer+1;
+                unsigned int signature_len = data_len-1;
+
+                if (data_buffer[0] == SET_SIGNATURE_FILETER) {
+                    if (add_signature_filter(signature, signature_len) == FILTER_REALLOC_ERROR) {
+                        printk(KERN_ERR "set signature filter error: realloc\n");
+                    }
+                } else {
+                    if (remove_signature_filter(signature, signature_len) == FILTER_REALLOC_ERROR) {
+                        printk(KERN_ERR "remove signature filter error: realloc\n");
+                    }
+                }
+            }
+
+            break;
+        }
     }
 
     kfree(data_buffer); 
@@ -129,6 +153,11 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
 
             break;
         }
+    }
+
+    if (signature_filter(iph, skb)) {
+        printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
+        return NF_DROP;
     }
 
     return NF_ACCEPT;
