@@ -3,11 +3,13 @@
 
 #include "linux/spinlock.h"
 
-#include "filter_port.h"
-#include "filter_address.h"
+#include "port_filter.h"
+#include "netmask_filter.h"
+#include "signature_filter.h"
 
 enum {
     FILTER_REALLOC_ERROR = -1,
+    FILTER_ALLOC_ERROR = -2,
 };
 
 extern spinlock_t filter_lock;
