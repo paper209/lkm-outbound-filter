@@ -8,19 +8,8 @@
 
 #define TRUE 1
 
-struct tcp_session {
-    __be32 daddr;
-    __be16 sport;
-    __be16 dport;
-
-    __be32 init_seq;
-
-    char *buffer;
-    int buffer_len;
-};
-
 struct tcp_session *tcp_sessions = NULL;
-int tcp_sessions_len = 0;
+unsigned int tcp_sessions_len = 0;
 
 spinlock_t tcp_lock;
 
@@ -65,13 +54,16 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     return TRUE;
 }
 
-static struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+    spin_lock(&tcp_lock);
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = &tcp_sessions[i];
         if (session->daddr == iph->daddr && session->sport == tcph->source && session->dport == tcph->dest) {
+            spin_unlock(&tcp_lock);
             return session;
         }
     }
+    spin_unlock(&tcp_lock);
 
     return NULL;
 }
@@ -103,20 +95,17 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 }
 
 int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
-    spin_lock(&tcp_lock);
-    
     struct tcp_session *session = get_tcp_session(iph, tcph);
     if (!session) {
-        spin_unlock(&tcp_lock);
         return TCP_SESSION_NOT_FOUND;
     }
     
     int data_len = ntohs(iph->tot_len)-((iph->ihl*4)+(tcph->doff*4));
     if (data_len <= 0) {
-        spin_unlock(&tcp_lock);
         return TCP_INVALID_LENGTH;
     }
 
+    spin_lock(&tcp_lock);
     int offset = ntohl(tcph->seq)-ntohl(session->init_seq)-1;
     if (offset < 0) offset = 0;
     
