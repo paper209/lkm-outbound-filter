@@ -12,4 +12,5 @@ void init_filter_lock(void) {
 void deinit_filter(void) {
     deinit_port_filter();
     deinit_netmask_filter();
+    deinit_signature_filter();
 }
