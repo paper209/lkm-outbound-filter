@@ -13,10 +13,22 @@ enum {
     TCP_BUFFER_COPY_ERROR = -5,
 };
 
+struct tcp_session {
+    __be32 daddr;
+    __be16 sport;
+    __be16 dport;
+
+    __be32 init_seq;
+
+    char *buffer;
+    unsigned int buffer_len;
+};
+
 void init_tcp_lock(void);
 void deinit_tcp_sessions(void);
 int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph);
 int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph);
 int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph);
+struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph);
 
 #endif
