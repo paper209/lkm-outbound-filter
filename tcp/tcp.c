@@ -54,19 +54,35 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     return TRUE;
 }
 
-struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+static struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = &tcp_sessions[i];
         if (session->daddr == iph->daddr && session->sport == tcph->source && session->dport == tcph->dest) {
-            spin_unlock(&tcp_lock);
             return session;
         }
     }
-    spin_unlock(&tcp_lock);
 
+    spin_unlock(&tcp_lock);
     return NULL;
 }
+
+char *get_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len) {
+    struct tcp_session *sess = get_tcp_session(iph, tcph);
+    if (!sess) return NULL;
+
+    *len = sess->buffer_len;
+    char *buffer = kmalloc(*len, GFP_ATOMIC);
+    if (!buffer) {
+        spin_unlock(&tcp_lock);
+        return NULL;
+    }
+    memcpy(buffer, sess->buffer, *len);
+    
+    spin_unlock(&tcp_lock);
+    return buffer;
+}
+
 
 int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
@@ -102,10 +118,10 @@ int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
     
     int data_len = ntohs(iph->tot_len)-((iph->ihl*4)+(tcph->doff*4));
     if (data_len <= 0) {
+        spin_unlock(&tcp_lock);
         return TCP_INVALID_LENGTH;
     }
 
-    spin_lock(&tcp_lock);
     int offset = ntohl(tcph->seq)-ntohl(session->init_seq)-1;
     if (offset < 0) offset = 0;
     
