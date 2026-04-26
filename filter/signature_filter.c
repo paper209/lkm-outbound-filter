@@ -97,12 +97,14 @@ bool check_signature(const char *buf, int buf_len) {
         for (int j = 0; j <= buf_len-f->signature_len; j++) {
             if (buf[j] == f->signature[0]) {
                 if (memcmp(buf+j, f->signature, f->signature_len) == 0) {
+                    kfree(buf);
                     return true;
                 }
             }
         }
     }
 
+    kfree(buf);
     return false;
 }
 
@@ -111,10 +113,12 @@ bool signature_filter(struct iphdr *iph, struct sk_buff *skb) {
         // tcp
         case 6: {
             const struct tcphdr *tcph = tcp_hdr(skb);
-            struct tcp_session *sess = get_tcp_session(iph, tcph);
-            if (!sess) return false;
+            
+            unsigned int buffer_len;
+            char *buf = get_tcp_buffer(iph, tcph, buffer_len);
+            if (!buf) return false;
 
-            return check_signature(sess->buffer, sess->buffer_len);
+            return check_signature(buf, buffer_len);
         }
 
         // udp
