@@ -97,14 +97,14 @@ bool check_signature(const char *buf, int buf_len) {
         for (int j = 0; j <= buf_len-f->signature_len; j++) {
             if (buf[j] == f->signature[0]) {
                 if (memcmp(buf+j, f->signature, f->signature_len) == 0) {
-                    kfree(buf);
+                    //kfree(buf);
                     return true;
                 }
             }
         }
     }
 
-    kfree(buf);
+    //kfree(buf);
     return false;
 }
 
@@ -118,11 +118,32 @@ bool signature_filter(struct iphdr *iph, struct sk_buff *skb) {
             char *buf = get_tcp_buffer(iph, tcph, buffer_len);
             if (!buf) return false;
 
-            return check_signature(buf, buffer_len);
+            bool ret = check_signature(buf, buffer_len);
+            kfree(buf);
+
+            return ret;
         }
 
         // udp
-        case 17: {}
+        case 17: {
+            const struct udphdr *udph = udp_hdr(skb);
+            int buffer_len = ntohs(udph->len)-sizeof(struct udphdr);
+            if (buffer_len < 0) return false;
+
+            char *buf = kmalloc(buffer_len, GFP_ATOMIC);
+            if (!buf) return false;
+
+            int data_offset = (char *)(udph+1)-(char *)skb->data;
+            if (skb_copy_bits(skb, data_offset, buf, buffer_len) < 0) {
+                kfree(buf);
+                return false;
+            }
+
+            bool ret = check_signature(buf, buffer_len);
+            kfree(buf);
+
+            return ret;
+        }
     }
 
     return false;
