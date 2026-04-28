@@ -115,7 +115,7 @@ bool signature_filter(struct iphdr *iph, struct sk_buff *skb) {
             const struct tcphdr *tcph = tcp_hdr(skb);
             
             unsigned int buffer_len;
-            char *buf = get_tcp_buffer(iph, tcph, buffer_len);
+            char *buf = get_tcp_buffer(iph, tcph, &buffer_len);
             if (!buf) return false;
 
             bool ret = check_signature(buf, buffer_len);
