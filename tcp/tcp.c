@@ -54,7 +54,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     return TRUE;
 }
 
-static struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+static struct tcp_session *get_tcp_session_locked(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = &tcp_sessions[i];
@@ -68,7 +68,7 @@ static struct tcp_session *get_tcp_session(struct iphdr *iph, struct tcphdr *tcp
 }
 
 char *get_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len) {
-    struct tcp_session *sess = get_tcp_session(iph, tcph);
+    struct tcp_session *sess = get_tcp_session_locked(iph, tcph);
     if (!sess) return NULL;
 
     *len = sess->buffer_len;
@@ -111,7 +111,7 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 }
 
 int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
-    struct tcp_session *session = get_tcp_session(iph, tcph);
+    struct tcp_session *session = get_tcp_session_locked(iph, tcph);
     if (!session) {
         return TCP_SESSION_NOT_FOUND;
     }
