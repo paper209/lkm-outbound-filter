@@ -41,6 +41,12 @@ int init_tcp(unsigned int max_sessions) {
 void deinit_tcp(void) {
     spin_lock(&tcp_lock);
 
+    // check the tcp sessions array's length
+    if (max_tcp_sessions < 1) {
+        spin_unlock(&tcp_lock);
+        return;
+    }
+
     for (int i = 0; i < max_tcp_sessions; i++) {
         struct tcp_session *sess = &tcp_sessions[i];
         kfree(sess->buffer);
