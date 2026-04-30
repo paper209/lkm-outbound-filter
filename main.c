@@ -8,6 +8,7 @@
 #include <linux/tcp.h>
 #include <linux/udp.h>
 
+#include "config.h"
 #include "tcp/tcp.h"
 #include "filter/filter.h"
 
@@ -130,9 +131,12 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
         case 6: {
             const struct tcphdr *tcph = tcp_hdr(skb);
             if (tcph->syn && !tcph->ack) {
-                switch (add_tcp_session(iph, tcph)) {
+                switch (new_tcp_session(iph, tcph)) {
                     case TCP_ALLOC_ERROR:
                         printk(KERN_ERR "tcp new connection error: alloc\n");
+                        break;
+                    case TCP_SESSIONS_FULL:
+                        printk(KERN_ERR "tcp new connection error: sessions full\n");
                         break;
                     case TCP_REALLOC_ERROR:
                         printk(KERN_ERR "tcp new connection error: realloc\n");
@@ -141,7 +145,7 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
             } else if (tcph->fin) {
                 remove_tcp_session(iph, tcph);
             } else {
-                switch (add_tcp_data(skb, iph, tcph)) {
+                switch (append_tcp_data(skb, iph, tcph)) {
                     case TCP_REALLOC_ERROR:
                         printk(KERN_ERR "tcp add data error: realloc\n");
                         break;
@@ -170,13 +174,13 @@ const struct nf_hook_ops nfho = {
     .priority = NF_IP_PRI_FIRST,
 };
 
-void init_locks(void) {
-    init_tcp_lock();
-    init_filter_lock();
-}
-
 int init(void) {
-    init_locks();
+    init_filter_lock();
+    if (init_tcp(TCP_MAX_SESSIONS) == TCP_ALLOC_ERROR) {
+        printk(KERN_ERR "init tcp error: alloc error\n");
+        return TCP_ALLOC_ERROR;
+    }
+    
     nf_register_net_hook(&init_net, &nfho);
     printk(KERN_INFO "outbound filter is loaded.\n");
 
@@ -187,7 +191,7 @@ void deinit(void) {
     nf_unregister_net_hook(&init_net, &nfho);
     
     deinit_filter();
-    deinit_tcp_sessions();
+    deinit_tcp();
     
     printk(KERN_INFO "outbound filter is unloaded.\n");
 }
