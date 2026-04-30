@@ -24,6 +24,10 @@ void deinit_tcp_sessions(void) {
         struct tcp_session *session = &tcp_sessions[i];    
         kfree(session->buffer);
     }
+
+    tcp_sessions = NULL;
+    tcp_sessions_len = 0;
+    
     kfree(tcp_sessions);
     
     spin_unlock(&tcp_lock);
@@ -54,8 +58,7 @@ int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     return TRUE;
 }
 
-static struct tcp_session *get_tcp_session_locked(struct iphdr *iph, struct tcphdr *tcph) {
-    spin_lock(&tcp_lock);
+static struct tcp_session *get_tcp_session_unlock(struct iphdr *iph, struct tcphdr *tcph) {
     for (int i = 0; i < tcp_sessions_len; i++) {
         struct tcp_session *session = &tcp_sessions[i];
         if (session->daddr == iph->daddr && session->sport == tcph->source && session->dport == tcph->dest) {
@@ -63,13 +66,16 @@ static struct tcp_session *get_tcp_session_locked(struct iphdr *iph, struct tcph
         }
     }
 
-    spin_unlock(&tcp_lock);
     return NULL;
 }
 
 char *get_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len) {
-    struct tcp_session *sess = get_tcp_session_locked(iph, tcph);
-    if (!sess) return NULL;
+    spin_lock(&tcp_lock);
+    struct tcp_session *sess = get_tcp_session_unlock(iph, tcph);
+    if (!sess) {
+        spin_unlock(&tcp_lock);
+        return NULL;
+    }
 
     *len = sess->buffer_len;
     char *buffer = kmalloc(*len, GFP_ATOMIC);
@@ -82,7 +88,6 @@ char *get_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len) 
     spin_unlock(&tcp_lock);
     return buffer;
 }
-
 
 int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
@@ -111,8 +116,10 @@ int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 }
 
 int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
-    struct tcp_session *session = get_tcp_session_locked(iph, tcph);
+    spin_lock(&tcp_lock);
+    struct tcp_session *session = get_tcp_session_unlock(iph, tcph);
     if (!session) {
+        spin_unlock(&tcp_lock);
         return TCP_SESSION_NOT_FOUND;
     }
     
