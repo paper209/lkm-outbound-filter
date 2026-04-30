@@ -11,6 +11,12 @@ enum {
     TCP_SESSION_NOT_FOUND = -3,
     TCP_INVALID_LENGTH = -4,
     TCP_BUFFER_COPY_ERROR = -5,
+    TCP_SESSIONS_FULL = -6,
+};
+
+enum session_state {
+    SESSION_EMPTY = 0,
+    SESSION_USED = 1,
 };
 
 struct tcp_session {
@@ -22,13 +28,15 @@ struct tcp_session {
 
     char *buffer;
     unsigned int buffer_len;
+
+    enum session_state state;
 };
 
-void init_tcp_lock(void);
-void deinit_tcp_sessions(void);
+int init_tcp(unsigned int max_sessions);
+void deinit_tcp(void);
+char *fetch_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len);
+int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph);
+int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph);
 int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph);
-int add_tcp_session(struct iphdr *iph, struct tcphdr *tcph);
-int add_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph);
-char *get_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len);
 
 #endif
