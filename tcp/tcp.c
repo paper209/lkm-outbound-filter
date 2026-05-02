@@ -127,11 +127,15 @@ int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph)
         return TCP_SESSION_NOT_FOUND;
     }
 
+    // calculate data's length and check the valid
     int data_len = ntohs(iph->tot_len)-((iph->ihl*4)+(tcph->doff*4));
     if (data_len <= 0) {
         spin_unlock(&tcp_lock);
         return TCP_INVALID_LENGTH;
-    } else if (sess->buffer_used+data_len > max_tcp_buffer) {
+    } else if (data_len > max_tcp_buffer) {
+        spin_unlock(&tcp_lock);
+        return TCP_DATA_TOO_BIG;
+    } else if (sess->buffer_used+data_len > max_tcp_buffer) {        
         sess->buffer_used = 0;
         memset(sess->buffer, 0, max_tcp_buffer);
     }
@@ -146,7 +150,7 @@ int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph)
         spin_unlock(&tcp_lock);
         return TCP_BUFFER_COPY_ERROR;
     } 
-
+    
     spin_unlock(&tcp_lock);
     return 0;
 }
