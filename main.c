@@ -136,18 +136,15 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
                         printk(KERN_ERR "tcp new connection error: alloc\n");
                         break;
                     case TCP_SESSIONS_FULL:
-                        printk(KERN_ERR "tcp new connection error: sessions full\n");
-                        break;
-                    case TCP_REALLOC_ERROR:
-                        printk(KERN_ERR "tcp new connection error: realloc\n");
+                        printk(KERN_ERR "tcp new connection error: sessions array is full\n");
                         break;
                 }
             } else if (tcph->fin) {
                 remove_tcp_session(iph, tcph);
             } else {
                 switch (append_tcp_data(skb, iph, tcph)) {
-                    case TCP_REALLOC_ERROR:
-                        printk(KERN_ERR "tcp add data error: realloc\n");
+                    case TCP_INVALID_LENGTH:
+                        printk(KERN_ERR "tcp add data error: invalid length\n");
                         break;
                     case TCP_BUFFER_COPY_ERROR:
                         printk(KERN_ERR "tcp add data error: buffer copy\n");
@@ -176,7 +173,7 @@ const struct nf_hook_ops nfho = {
 
 int init(void) {
     init_filter_lock();
-    if (init_tcp(TCP_MAX_SESSIONS) == TCP_ALLOC_ERROR) {
+    if (init_tcp(TCP_MAX_SESSIONS, TCP_MAX_BUFFER) == TCP_ALLOC_ERROR) {
         printk(KERN_ERR "init tcp error: alloc error\n");
         return TCP_ALLOC_ERROR;
     }
