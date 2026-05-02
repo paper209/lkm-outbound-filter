@@ -7,11 +7,10 @@
 
 enum {
     TCP_ALLOC_ERROR = -1,
-    TCP_REALLOC_ERROR = -2,
-    TCP_SESSION_NOT_FOUND = -3,
-    TCP_INVALID_LENGTH = -4,
-    TCP_BUFFER_COPY_ERROR = -5,
-    TCP_SESSIONS_FULL = -6,
+    TCP_SESSION_NOT_FOUND = -2,
+    TCP_INVALID_LENGTH = -3,
+    TCP_BUFFER_COPY_ERROR = -4,
+    TCP_SESSIONS_FULL = -5,
 };
 
 enum session_state {
@@ -27,12 +26,12 @@ struct tcp_session {
     __be32 init_seq;
 
     char *buffer;
-    unsigned int buffer_len;
+    unsigned int buffer_used;
 
     enum session_state state;
 };
 
-int init_tcp(unsigned int max_sessions);
+int init_tcp(unsigned int max_sessions, unsigned int max_buffer);
 void deinit_tcp(void);
 char *fetch_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len);
 int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph);
