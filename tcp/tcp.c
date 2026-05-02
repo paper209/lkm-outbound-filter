@@ -9,8 +9,10 @@
  
 spinlock_t tcp_lock;
 
+unsigned int max_tcp_buffer = 0; // tcp session's buffer max length
+unsigned int max_tcp_sessions = 0; // max tcp sessions count
+
 struct tcp_session *tcp_sessions = NULL;
-unsigned int max_tcp_sessions = 0;
 
 // init spin lock
 static void init_tcp_lock(void) {
@@ -31,9 +33,11 @@ static int init_tcp_sessions(unsigned int max_sessions) {
     return 0;
 }
 
-/// init spin lock and tcp sessions array
-int init_tcp(unsigned int max_sessions) {
+// init spin lock and tcp sessions array
+int init_tcp(unsigned int max_sessions, unsigned int max_buffer) {
     init_tcp_lock();
+    max_tcp_buffer = max_buffer;
+    
     return init_tcp_sessions(max_sessions);
 }
 
@@ -100,7 +104,7 @@ char *fetch_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len
         return NULL;
     }
 
-    *len = sess->buffer_len;
+    *len = sess->buffer_used;
     char *buffer = kmalloc(*len, GFP_ATOMIC);
     if (!buffer) {
         spin_unlock(&tcp_lock);
@@ -127,22 +131,15 @@ int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph)
     if (data_len <= 0) {
         spin_unlock(&tcp_lock);
         return TCP_INVALID_LENGTH;
+    } else if (sess->buffer_used+data_len > max_tcp_buffer) {
+        sess->buffer_used = 0;
+        memset(sess->buffer, 0, max_tcp_buffer);
     }
+    sess->buffer_used += data_len;
 
     // calculate buffer offset
     int offset = ntohl(tcph->seq)-ntohl(sess->init_seq)-1;
     if (offset < 0) offset = 0;
-    
-    if (offset+data_len > sess->buffer_len) {
-        char *buffer = krealloc(sess->buffer, offset+data_len, GFP_ATOMIC);
-        if (!buffer) {
-            spin_unlock(&tcp_lock);
-            return TCP_REALLOC_ERROR;
-        }
-
-        sess->buffer = buffer;
-        sess->buffer_len = offset+data_len;
-    }
 
     int data_offset = ((char *)tcph+tcph->doff*4)-(char *)skb->data;
     if (skb_copy_bits(skb, data_offset, sess->buffer+offset, data_len) < 0) {
@@ -164,15 +161,22 @@ int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
         return i;
     }
 
+    char *buffer = kmalloc(max_tcp_buffer, GFP_ATOMIC);
+    if (!buffer) {
+        spin_unlock(&tcp_lock);
+        return TCP_ALLOC_ERROR;
+    }
+
     tcp_sessions[i] = (struct tcp_session){
         .daddr = iph->daddr,
         .sport = tcph->source,
         .dport = tcph->dest,
         .init_seq = tcph->seq,
-        .buffer = NULL,
-        .buffer_len = 0,
+        .buffer = buffer,
+        .buffer_used = 0,
         .state = SESSION_USED,
     };
+    
 
     spin_unlock(&tcp_lock);
     return 0;
