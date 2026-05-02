@@ -11,6 +11,7 @@ enum {
     TCP_INVALID_LENGTH = -3,
     TCP_BUFFER_COPY_ERROR = -4,
     TCP_SESSIONS_FULL = -5,
+    TCP_DATA_TOO_BIG = -6,
 };
 
 enum session_state {
