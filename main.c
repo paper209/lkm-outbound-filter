@@ -172,7 +172,7 @@ const struct nf_hook_ops nfho = {
 };
 
 int init(void) {
-    init_filter_lock();
+    init_filters_lock();
     if (init_tcp(TCP_MAX_SESSIONS, TCP_MAX_BUFFER) == TCP_ALLOC_ERROR) {
         printk(KERN_ERR "init tcp error: alloc error\n");
         return TCP_ALLOC_ERROR;
