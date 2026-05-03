@@ -1,12 +1,11 @@
 #include <linux/kernel.h>
-#include <linux/spinlock.h>
 
 #include "filter.h"
 
-spinlock_t filter_lock;
-
-void init_filter_lock(void) {
-    spin_lock_init(&filter_lock);
+void init_filters_lock(void) {
+    init_port_lock();
+    init_netmask_lock();
+    init_signature_lock();
 }
 
 void deinit_filter(void) {
