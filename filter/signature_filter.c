@@ -4,6 +4,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/spinlock.h>
 
 #include "filter.h"
 #include "../tcp/tcp.h"
@@ -13,27 +14,33 @@ struct filter {
     unsigned int signature_len;
 };
 
+spinlock_t signature_lock;
+
 struct filter *signature_filters = NULL;
 unsigned int signature_filters_len = 0;
 
+void init_signature_lock(void) {
+    spin_lock_init(&signature_lock);
+}
+
 void deinit_signature_filter(void) {
-    spin_lock(&filter_lock);
+    spin_lock(&signature_lock);
     for (int i = 0; i < signature_filters_len; i++) {
         struct filter *f = &signature_filters[i];
         kfree(f->signature);
     }
 
     kfree(signature_filters);
-    spin_unlock(&filter_lock);
+    spin_unlock(&signature_lock);
 }
 
 int add_signature_filter(char *signature, unsigned int signature_len) {
-    spin_lock(&filter_lock);
+    spin_lock(&signature_lock);
 
     struct filter *filters = krealloc(signature_filters, sizeof(struct filter)*++signature_filters_len, GFP_ATOMIC);
     if (!filters) {
         signature_filters_len--;
-        spin_unlock(&filter_lock);
+        spin_unlock(&signature_lock);
 
         return FILTER_REALLOC_ERROR;
     }
@@ -42,7 +49,7 @@ int add_signature_filter(char *signature, unsigned int signature_len) {
     char *copy_signature = kmalloc(signature_len, GFP_ATOMIC);
     if (!copy_signature) {
         signature_filters_len--;
-        spin_unlock(&filter_lock);
+        spin_unlock(&signature_lock);
         return FILTER_ALLOC_ERROR;
     }
     memcpy(copy_signature, signature, signature_len);
@@ -54,13 +61,13 @@ int add_signature_filter(char *signature, unsigned int signature_len) {
 
     printk(KERN_INFO "added signature filter: %u\n", signature_len);
     
-    spin_unlock(&filter_lock);
+    spin_unlock(&signature_lock);
     
     return 0;
 }
 
 int remove_signature_filter(char *signature, unsigned int signature_len) {
-    spin_lock(&filter_lock);
+    spin_lock(&signature_lock);
 
     for (int i = 0; i < signature_filters_len; i++) {
         struct filter *f = &signature_filters[i];
@@ -74,7 +81,7 @@ int remove_signature_filter(char *signature, unsigned int signature_len) {
 
             struct filter *filters = krealloc(signature_filters, sizeof(struct filter)*signature_filters_len, GFP_ATOMIC);
             if (!filters) {
-                spin_unlock(&filter_lock);
+                spin_unlock(&signature_lock);
 
                 return FILTER_REALLOC_ERROR;
             }
@@ -85,12 +92,12 @@ int remove_signature_filter(char *signature, unsigned int signature_len) {
     }
     printk(KERN_INFO "removed signature filter: %u\n", signature_len);
     
-    spin_unlock(&filter_lock);
+    spin_unlock(&signature_lock);
     return 0;
 }
 
 bool check_signature(const char *buf, int buf_len) {
-    spin_lock(&filter_lock);
+    spin_lock(&signature_lock);
     for (int i = 0; i < signature_filters_len; i++) {
         struct filter *f = &signature_filters[i];
         if (f->signature_len > buf_len) continue;
@@ -98,14 +105,14 @@ bool check_signature(const char *buf, int buf_len) {
         for (int j = 0; j <= buf_len-f->signature_len; j++) {
             if (buf[j] == f->signature[0]) {
                 if (memcmp(buf+j, f->signature, f->signature_len) == 0) {
-                    spin_unlock(&filter_lock);
+                    spin_unlock(&signature_lock);
                     return true;
                 }
             }
         }
     }
 
-    spin_unlock(&filter_lock);
+    spin_unlock(&signature_lock);
     return false;
 }
 
