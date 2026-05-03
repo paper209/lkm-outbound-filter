@@ -90,6 +90,7 @@ int remove_signature_filter(char *signature, unsigned int signature_len) {
 }
 
 bool check_signature(const char *buf, int buf_len) {
+    spin_lock(&filter_lock);
     for (int i = 0; i < signature_filters_len; i++) {
         struct filter *f = &signature_filters[i];
         if (f->signature_len > buf_len) continue;
@@ -97,14 +98,14 @@ bool check_signature(const char *buf, int buf_len) {
         for (int j = 0; j <= buf_len-f->signature_len; j++) {
             if (buf[j] == f->signature[0]) {
                 if (memcmp(buf+j, f->signature, f->signature_len) == 0) {
-                    //kfree(buf);
+                    spin_unlock(&filter_lock);
                     return true;
                 }
             }
         }
     }
 
-    //kfree(buf);
+    spin_unlock(&filter_lock);
     return false;
 }
 
