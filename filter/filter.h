@@ -7,9 +7,8 @@
 
 // error code
 enum {
-    FILTER_REALLOC_ERROR = -1,
-    FILTER_ALLOC_ERROR = -2,
-    FILTER_IS_FULL = -3,
+    FILTER_ALLOC_ERROR = -1,
+    FILTER_IS_FULL = -2,
 };
 
 // filter's state
