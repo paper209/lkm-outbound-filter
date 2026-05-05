@@ -7,12 +7,12 @@
 
 #include "tcp.h"
  
-spinlock_t tcp_lock;
+static spinlock_t tcp_lock;
 
-unsigned int max_tcp_buffer = 0; // tcp session's buffer max length
-unsigned int max_tcp_sessions = 0; // max tcp sessions count
+static unsigned int max_tcp_buffer = 0; // tcp session's buffer max length
+static unsigned int max_tcp_sessions = 0; // max tcp sessions count
 
-struct tcp_session *tcp_sessions = NULL;
+static struct tcp_session *tcp_sessions = NULL;
 
 // init spin lock
 static void init_tcp_lock(void) {
