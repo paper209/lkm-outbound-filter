@@ -87,13 +87,11 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
                 unsigned int signature_len = data_len-1;
 
                 if (data_buffer[0] == SET_SIGNATURE_FILETER) {
-                    if (add_signature_filter(signature, signature_len) == FILTER_REALLOC_ERROR) {
-                        printk(KERN_ERR "set signature filter error: realloc\n");
+                    if (new_signature_filter(signature, signature_len) == FILTER_IS_FULL) {
+                        printk(KERN_ERR "set signature filter error: filter is full\n");
                     }
                 } else {
-                    if (remove_signature_filter(signature, signature_len) == FILTER_REALLOC_ERROR) {
-                        printk(KERN_ERR "remove signature filter error: realloc\n");
-                    }
+                    remove_signature_filter(signature, signature_len);
                 }
             }
 
@@ -168,7 +166,6 @@ const struct nf_hook_ops nfho = {
 };
 
 int init(void) {
-    init_filters_lock();
     if (init_tcp(TCP_MAX_SESSIONS, TCP_MAX_BUFFER) == TCP_ALLOC_ERROR) {
         printk(KERN_ERR "init tcp error: alloc error\n");
         return TCP_ALLOC_ERROR;
