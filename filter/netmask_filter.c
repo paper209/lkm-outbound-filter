@@ -116,10 +116,13 @@ bool netmask_filter(struct iphdr *iph) {
     // check the port filters
     for (int i = min; i < max_filters_len; i++) {
         struct filter *f = &filters[i];
-        if ((f->address&f->mask) == (iph->daddr&f->mask)) {
-            spin_unlock(&netmask_lock);
-            return true;
-        } 
+
+        if (f->state == FILTER_USED) {
+            if ((f->address&f->mask) == (iph->daddr&f->mask)) {
+                spin_unlock(&netmask_lock);
+                return true;
+            } 
+        }
     }
     spin_unlock(&netmask_lock);
 
