@@ -143,10 +143,14 @@ bool port_filter(struct iphdr *iph, struct sk_buff *skb) {
     // check the port filters
     for (int i = min; i < max_filters_len; i++) {
         struct filter *f = &filters[i];
-        if (f->protocol == packet.protocol && f->port == packet.port) {
-            spin_unlock(&port_lock);
-            return true;
-        } 
+
+        if (f->state == FILTER_USED) {
+            if (f->protocol == packet.protocol && f->port == packet.port) {
+                spin_unlock(&port_lock);
+                return true;
+            } 
+        }
+
     }
     spin_unlock(&port_lock);
 
