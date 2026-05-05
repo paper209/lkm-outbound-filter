@@ -12,15 +12,13 @@ int init_filters(unsigned int max_len) {
     n = init_netmask_filter(max_len);
     if (n < 0) return n;
 
+    // init signature filter
+    n = init_signature_filter(max_len);
+    if (n < 0) return n;
+
     return 0;
 }
 
-// to be removed
-void init_filters_lock(void) {
-    //init_port_lock();
-    //init_netmask_lock();
-    init_signature_lock();
-}
 
 void deinit_filters(void) {
     deinit_port_filter();
