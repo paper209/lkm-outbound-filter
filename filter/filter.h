@@ -18,7 +18,7 @@ enum filter_state {
     FILTER_EMPTY = 0,
 };
 
-void deinit_filter(void);
+void deinit_filters(void);
 int init_filters(unsigned int max_len);
 void init_filters_lock(void);
 
