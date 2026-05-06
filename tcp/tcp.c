@@ -147,7 +147,9 @@ int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph)
 
     int data_offset = ((char *)tcph+tcph->doff*4)-(char *)skb->data;
     if (skb_copy_bits(skb, data_offset, sess->buffer+offset, data_len) < 0) {
+        sess->buffer_used -= data_len;
         spin_unlock(&tcp_lock);
+        
         return TCP_BUFFER_COPY_ERROR;
     } 
     
