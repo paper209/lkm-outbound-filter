@@ -139,7 +139,7 @@ static bool check_signature(const char *buf, int buf_len) {
         if (f->signature_len > buf_len) continue;
 
         // check the signature
-        for (int j = 0; j <= buf_len-f->signature_len; j++) {
+        for (int j = 1; j <= buf_len-f->signature_len; j++) {
             if (f->state == FILTER_USED) {
                 if (memcmp(buf+j, f->signature, f->signature_len) == 0) {
                     spin_unlock(&signature_lock);
