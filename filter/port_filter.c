@@ -50,9 +50,9 @@ void deinit_port_filter(void) {
 }
 
 // find free index on filters array
-static int find_free_index(__be16 port) {
+static int find_free_index(__be16 port, __u8 protocol) {
     // calculate minimum start index number
-    unsigned int min = ntohs(port)%max_filters_len;
+    unsigned int min = (ntohs(port)+protocol)%max_filters_len;
     
     // find free index number and return
     for (int i = min; i < max_filters_len; i++) {
@@ -71,7 +71,7 @@ int new_port_filter(__be16 port, __u8 protocol) {
     spin_lock(&port_lock);
 
     // find a free index
-    int i = find_free_index(port);
+    int i = find_free_index(port, protocol);
     if (i < 0) {
         spin_unlock(&port_lock);
         return i;
@@ -96,7 +96,7 @@ void remove_port_filter(__be16 port, __u8 protocol) {
     spin_lock(&port_lock);
     
     // calculate minimum start index number
-    unsigned int min = ntohs(port)%max_filters_len;
+    unsigned int min = (ntohs(port)+protocol)%max_filters_len;
     for (int i = min; i < max_filters_len; i++) {
         struct filter *f = &filters[i];
         if (f->protocol == protocol && f->port == port) {
@@ -137,7 +137,7 @@ bool port_filter(struct iphdr *iph, struct sk_buff *skb) {
     }
     
     // calculate minimum start index number
-    unsigned int min = ntohs(packet.port)%max_filters_len;
+    unsigned int min = (ntohs(packet.port)+packet.protocol)%max_filters_len;
     spin_lock(&port_lock);
 
     // check the port filters
