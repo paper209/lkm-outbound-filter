@@ -61,9 +61,9 @@ void deinit_tcp(void) {
 }
 
 // find free index number on tcp sessions array
-static int find_free_index(__be16 sport) {
+static int find_free_index(__be16 sport, __be32 daddr) {
     // minimum start index number
-    unsigned int min = ntohs(sport)%max_tcp_sessions;
+    unsigned int min = (ntohs(sport)+ntohl(daddr))%max_tcp_sessions;
     
     // find free index number and return
     for (int i = min; i < max_tcp_sessions; i++) {
@@ -80,7 +80,7 @@ static int find_free_index(__be16 sport) {
 // fetch tcp session from the tcp sessions array (caller must hold spin lock)
 static struct tcp_session *fetch_tcp_session_unlock(struct iphdr *iph, struct tcphdr *tcph) {
     // minimum start index number
-    unsigned int min = ntohs(tcph->source)%max_tcp_sessions;
+    unsigned int min = (ntohs(tcph->source)+ntohl(iph->daddr))%max_tcp_sessions;
     for (int i = min; i < max_tcp_sessions; i++) {
         struct tcp_session *sess = &tcp_sessions[i];   
         if (sess->state == SESSION_USED) {
@@ -161,7 +161,7 @@ int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph)
 int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
 
-    int i = find_free_index(tcph->source);
+    int i = find_free_index(tcph->source, iph->daddr);
     if (i < 0) {
         spin_unlock(&tcp_lock);
         return i;
