@@ -54,10 +54,24 @@ void deinit_signature_filter(void) {
     spin_unlock(&signature_lock);
 }
 
+// calculate minimum start index number
+static unsigned int min_index(char *buf, unsigned int len) {
+    unsigned int min = 0;
+    if (len > 3) {
+        min = (buf[0]+buf[1]+buf[2])%max_filters_len;
+    } else if (len > 2) {
+        min = (buf[0]+buf[1])%max_filters_len;
+    } else {
+        min = buf[0]%max_filters_len;
+    }
+
+    return min;
+}
+
 // find free index on netmask filters array
-static int find_free_index(char *signature) {
+static int find_free_index(char *signature, unsigned int signature_len) {
     // calculate minimum start index number
-    unsigned int min = signature[0]%max_filters_len;
+    unsigned int min = min_index(signature, signature_len);
     
     // find free index number and return
     for (int i = min; i < max_filters_len; i++) {
@@ -76,7 +90,7 @@ int new_signature_filter(char *signature, unsigned int signature_len) {
     spin_lock(&signature_lock);
     
     // find free index using signature len
-    int i = find_free_index(signature);
+    int i = find_free_index(signature, signature_len);
     if (i < 0) {
         spin_unlock(&signature_lock);
         return i;
@@ -109,7 +123,7 @@ void remove_signature_filter(char *signature, unsigned int signature_len) {
     spin_lock(&signature_lock);
 
     // calculate minimum start index number
-    unsigned int min = signature[0]%max_filters_len;
+    unsigned int min = min_index(signature, signature_len);
     for (int i = min; i < max_filters_len; i ++) {
         struct filter *f = &filters[i];
         if (f->state == FILTER_USED) {
@@ -133,13 +147,13 @@ static bool check_signature(const char *buf, int buf_len) {
     spin_lock(&signature_lock);
 
     // calculate minimum start index number
-    unsigned int min = buf[0]%max_filters_len;
+    unsigned int min = min_index(buf, buf_len);
     for (int i = min; i < max_filters_len; i++) {
         struct filter *f = &filters[i];
         if (f->signature_len > buf_len) continue;
 
         // check the signature
-        for (int j = 1; j <= buf_len-f->signature_len; j++) {
+        for (int j = 0; j <= buf_len-f->signature_len; j++) {
             if (f->state == FILTER_USED) {
                 if (memcmp(buf+j, f->signature, f->signature_len) == 0) {
                     spin_unlock(&signature_lock);
