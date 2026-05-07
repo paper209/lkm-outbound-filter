@@ -1,4 +1,4 @@
-## Outbound Filter Kernel Module
+## LKM Outbound Filter
 It works on the Linux Kernel, using Netfilter to filter outbound traffic.
 
 ## Supported Filters
