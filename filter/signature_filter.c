@@ -4,6 +4,7 @@
 #include <linux/ip.h>
 #include <linux/tcp.h>
 #include <linux/udp.h>
+#include <linux/icmp.h>
 #include <linux/spinlock.h>
 
 #include "filter.h"
@@ -188,7 +189,7 @@ bool signature_filter(struct iphdr *iph, struct sk_buff *skb) {
         case 17: {
             const struct udphdr *udph = udp_hdr(skb);
             int buffer_len = ntohs(udph->len)-sizeof(struct udphdr);
-            if (buffer_len < 0) return false;
+            if (buffer_len <= 0) return false;
 
             char *buf = kmalloc(buffer_len, GFP_ATOMIC);
             if (!buf) return false;
@@ -203,6 +204,29 @@ bool signature_filter(struct iphdr *iph, struct sk_buff *skb) {
             kfree(buf);
 
             return ret;
+        }
+
+        // icmp
+        case 1: {
+            const struct icmphdr *icmph = icmp_hdr(skb);
+            if (icmph->type == ICMP_ECHO) {
+                int buffer_len = ntohs(iph->tot_len)-((iph->ihl*4)+sizeof(struct icmphdr));
+                if (buffer_len <= 0) return false;
+
+                char *buf = kmalloc(buffer_len, GFP_ATOMIC);
+                if (!buf) return false;
+
+                int data_offset = (char *)(icmph+1)-(char *)skb->data;
+                if (skb_copy_bits(skb, data_offset, buf, buffer_len) < 0) {
+                    kfree(buf);
+                    return false;
+                }
+
+                bool ret = check_signature(buf, buffer_len);
+                kfree(buf);
+
+                return ret;
+            }
         }
     }
 
