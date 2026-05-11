@@ -2,7 +2,7 @@
 It works on the Linux Kernel, using Netfilter to filter outbound traffic.
 
 ## Supported Filters
-- **Signature Filter** (TCP, UDP)  
+- **Signature Filter** (TCP, UDP, ICMP)  
    Filters packets by inspecting payloads and matching specific signatures (DPI).
 
 - **Port Filter** (TCP, UDP)  
