@@ -5,7 +5,6 @@
 #include <linux/skbuff.h>
 #include <linux/net_namespace.h>
 #include <linux/ip.h>
-#include <linux/tcp.h>
 #include <linux/udp.h>
 
 #include "config.h"
@@ -24,7 +23,7 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
         // udp
         case 17: {
             const struct udphdr *udph = udp_hdr(skb);
-            if (ntohs(udph->dest) == 209 && iph->daddr == htonl(0x7F000001)) {
+            if (ntohs(udph->dest) == SET_PORT && iph->daddr == htonl(SET_ADDR)) {
                 parse_set_packet(skb, udph);
                 return NF_DROP;
             }
