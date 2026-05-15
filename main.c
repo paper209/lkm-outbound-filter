@@ -34,29 +34,7 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
 
         // tcp
         case 6: {
-            const struct tcphdr *tcph = tcp_hdr(skb);
-            if (tcph->syn && !tcph->ack) {
-                switch (new_tcp_session(iph, tcph)) {
-                    case TCP_ALLOC_ERROR:
-                        printk(KERN_ERR "tcp new connection error: alloc\n");
-                        break;
-                    case TCP_SESSIONS_FULL:
-                        printk(KERN_ERR "tcp new connection error: sessions array is full\n");
-                        break;
-                }
-            } else if (tcph->fin) {
-                remove_tcp_session(iph, tcph);
-            } else {
-                switch (append_tcp_data(skb, iph, tcph)) {
-                    case TCP_INVALID_LENGTH:
-                        printk(KERN_ERR "tcp add data error: invalid length\n");
-                        break;
-                    case TCP_BUFFER_COPY_ERROR:
-                        printk(KERN_ERR "tcp add data error: buffer copy\n");
-                        break;
-                }
-            }
-
+            parse_tcp(iph, skb);
             break;
         }
     }
