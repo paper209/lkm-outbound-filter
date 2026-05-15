@@ -19,7 +19,7 @@ enum {
     SET_NETMASK_FILTER = 2,
     REMOVE_NETMASK_FILTER = 3,
 
-    SET_SIGNATURE_FILETER = 4,
+    SET_SIGNATURE_FILTER = 4,
     REMOVE_SIGNATURE_FILTER = 5,
 };
 
@@ -81,12 +81,12 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
 
         // [type(1byte)][signature[nbyte]]
         case REMOVE_SIGNATURE_FILTER:
-        case SET_SIGNATURE_FILETER: {
+        case SET_SIGNATURE_FILTER: {
             if (1 < data_len) {
                 char *signature = data_buffer+1;
                 unsigned int signature_len = data_len-1;
 
-                if (data_buffer[0] == SET_SIGNATURE_FILETER) {
+                if (data_buffer[0] == SET_SIGNATURE_FILTER) {
                     if (new_signature_filter(signature, signature_len) == FILTER_IS_FULL) {
                         printk(KERN_ERR "set signature filter error: filter is full\n");
                     }
@@ -105,7 +105,7 @@ void parse_set_packet(struct sk_buff *skb, const struct udphdr *udph) {
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
     if (port_filter(iph, skb) || netmask_filter(iph)) {
-        printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
+        printk(KERN_INFO "(1) filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
         return NF_DROP;
     }
     
@@ -151,7 +151,7 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
     }
 
     if (signature_filter(iph, skb)) {
-        printk(KERN_INFO "filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
+        printk(KERN_INFO "(2) filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
         return NF_DROP;
     }
 
