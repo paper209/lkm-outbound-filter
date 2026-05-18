@@ -12,13 +12,7 @@
 #include "filter/filter.h"
 #include "parser/parser.h"
 
-unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
-    const struct iphdr *iph = ip_hdr(skb);
-    if (port_filter(iph, skb) || netmask_filter(iph)) {
-        printk(KERN_INFO "(1) filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
-        return NF_DROP;
-    }
-    
+unsigned int parse_protocol(struct iphdr *iph, struct sk_buff *skb) {
     switch (iph->protocol) {
         // udp
         case 17: {
@@ -37,6 +31,20 @@ unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *sta
             break;
         }
     }
+
+    return NF_ACCEPT;
+}
+
+unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
+    const struct iphdr *iph = ip_hdr(skb);
+    
+    if (port_filter(iph, skb) || netmask_filter(iph)) {
+        printk(KERN_INFO "(1) filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
+        return NF_DROP;
+    }
+
+    unsigned int n = parse_protocol(iph, skb);
+    if (n == NF_DROP) return n;
 
     if (signature_filter(iph, skb)) {
         printk(KERN_INFO "(2) filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
