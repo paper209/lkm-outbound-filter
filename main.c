@@ -37,6 +37,60 @@ unsigned int parse_protocol(struct iphdr *iph, struct sk_buff *skb) {
 
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
+    if (fast_filter(skb, iph)) {
+        return NF_DROP;
+    }
+
+    unsigned int n = parse_protocol(iph, skb);
+    if (n == NF_DROP) return n;
+
+    if (slow_filter(skb, iph)) {
+        return NF_DROP;
+    }
+
+    return NF_ACCEPT;
+}
+
+const struct nf_hook_ops nfho = {
+    .pf = PF_INET,
+    .hook = hook,
+    .hooknum = NF_INET_LOCAL_OUT,
+    .priority = NF_IP_PRI_FIRST,
+};
+
+int init(void) {
+    if (init_tcp(TCP_MAX_SESSIONS, TCP_MAX_BUFFER) == TCP_ALLOC_ERROR) {
+        printk(KERN_ERR "init tcp error: alloc error\n");
+        return TCP_ALLOC_ERROR;
+    }
+
+    if (init_filters(FILTER_MAX_LENGTH) == FILTER_ALLOC_ERROR) {
+        printk(KERN_ERR "init filters error: alloc error\n");
+        return FILTER_ALLOC_ERROR;
+    }
+
+    
+    nf_register_net_hook(&init_net, &nfho);
+    printk(KERN_INFO "outbound filter is loaded.\n");
+
+    return 0;
+}
+
+void deinit(void) {
+    nf_unregister_net_hook(&init_net, &nfho);
+    
+    deinit_filters();
+    deinit_tcp();
+    
+    printk(KERN_INFO "outbound filter is unloaded.\n");
+}
+
+module_init(init);
+module_exit(deinit);
+
+MODULE_LICENSE("GPL");
+unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
+    const struct iphdr *iph = ip_hdr(skb);
     
     if (port_filter(iph, skb) || netmask_filter(iph)) {
         printk(KERN_INFO "(1) filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
