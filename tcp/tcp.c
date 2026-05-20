@@ -1,87 +1,233 @@
 #include <linux/kernel.h>
-#include <linux/module.h>
-#include <linux/netfilter.h>
-#include <linux/netfilter_ipv4.h>
-#include <linux/skbuff.h>
-#include <linux/net_namespace.h>
 #include <linux/ip.h>
 #include <linux/tcp.h>
-#include <linux/udp.h>
+#include <linux/spinlock.h>
+#include <linux/skbuff.h>
+#include <linux/slab.h>
 
-#include "config.h"
-#include "tcp/tcp.h"
-#include "filter/filter.h"
-#include "parser/parser.h"
+#include "tcp.h"
+ 
+static spinlock_t tcp_lock;
 
-unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
-    const struct iphdr *iph = ip_hdr(skb);
-    if (port_filter(iph, skb) || netmask_filter(iph)) {
-        printk(KERN_INFO "(1) filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
-        return NF_DROP;
-    }
-    
-    switch (iph->protocol) {
-        // udp
-        case 17: {
-            const struct udphdr *udph = udp_hdr(skb);
-            if (ntohs(udph->dest) == 209 && iph->daddr == htonl(0x7F000001)) {
-                parse_set_packet(skb, udph);
-                return NF_DROP;
-            }
+static unsigned int max_tcp_buffer = 0; // tcp session's buffer max length
+static unsigned int max_tcp_sessions = 0; // max tcp sessions count
 
-            break;
-        }
+static struct tcp_session *tcp_sessions = NULL;
 
-        // tcp
-        case 6: {
-            parse_tcp(iph, skb);
-            break;
-        }
-    }
-
-    if (signature_filter(iph, skb)) {
-        printk(KERN_INFO "(2) filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
-        return NF_DROP;
-    }
-
-    return NF_ACCEPT;
+// init spin lock
+static void init_tcp_lock(void) {
+    spin_lock_init(&tcp_lock);
 }
 
-const struct nf_hook_ops nfho = {
-    .pf = PF_INET,
-    .hook = hook,
-    .hooknum = NF_INET_LOCAL_OUT,
-    .priority = NF_IP_PRI_FIRST,
-};
-
-int init(void) {
-    if (init_tcp(TCP_MAX_SESSIONS, TCP_MAX_BUFFER) == TCP_ALLOC_ERROR) {
-        printk(KERN_ERR "init tcp error: alloc error\n");
+// init tcp sessions size of max tcp sessions
+static int init_tcp_sessions(unsigned int max_sessions) {
+    spin_lock(&tcp_lock);
+    max_tcp_sessions = max_sessions;
+    tcp_sessions = kcalloc(max_sessions, sizeof(struct tcp_session), GFP_ATOMIC);
+    if (!tcp_sessions) {
+        spin_unlock(&tcp_lock);
         return TCP_ALLOC_ERROR;
     }
-
-    if (init_filters(FILTER_MAX_LENGTH) == FILTER_ALLOC_ERROR) {
-        printk(KERN_ERR "init filters error: alloc error\n");
-        return FILTER_ALLOC_ERROR;
-    }
-
-    
-    nf_register_net_hook(&init_net, &nfho);
-    printk(KERN_INFO "outbound filter is loaded.\n");
+    spin_unlock(&tcp_lock);
 
     return 0;
 }
 
-void deinit(void) {
-    nf_unregister_net_hook(&init_net, &nfho);
+// init spin lock and tcp sessions array
+int init_tcp(unsigned int max_sessions, unsigned int max_buffer) {
+    init_tcp_lock();
+    max_tcp_buffer = max_buffer;
     
-    deinit_filters();
-    deinit_tcp();
-    
-    printk(KERN_INFO "outbound filter is unloaded.\n");
+    return init_tcp_sessions(max_sessions);
 }
 
-module_init(init);
-module_exit(deinit);
+// deinit tcp sessions array
+void deinit_tcp(void) {
+    spin_lock(&tcp_lock);
 
-MODULE_LICENSE("GPL");
+    // check the tcp sessions array's length
+    if (max_tcp_sessions < 1) {
+        spin_unlock(&tcp_lock);
+        return;
+    }
+
+    for (int i = 0; i < max_tcp_sessions; i++) {
+        struct tcp_session *sess = &tcp_sessions[i];
+        kfree(sess->buffer);
+    }
+    kfree(tcp_sessions);
+
+    spin_unlock(&tcp_lock);
+}
+
+// find free index number on tcp sessions array
+static int find_free_index(__be16 sport, __be32 daddr) {
+    // minimum start index number
+    unsigned int min = (ntohs(sport)+ntohl(daddr))%max_tcp_sessions;
+    
+    // find free index number and return
+    for (int i = min; i < max_tcp_sessions; i++) {
+        struct tcp_session *sess = &tcp_sessions[i];
+        if (sess->state == SESSION_EMPTY) {
+            return i;
+        }
+    }
+
+    // find free index number failed
+    return TCP_SESSIONS_FULL;
+}
+
+// fetch tcp session from the tcp sessions array (caller must hold spin lock)
+static struct tcp_session *fetch_tcp_session_unlock(struct iphdr *iph, struct tcphdr *tcph) {
+    // minimum start index number
+    unsigned int min = (ntohs(tcph->source)+ntohl(iph->daddr))%max_tcp_sessions;
+    for (int i = min; i < max_tcp_sessions; i++) {
+        struct tcp_session *sess = &tcp_sessions[i];   
+        if (sess->state == SESSION_USED) {
+            if (sess->daddr == iph->daddr && sess->sport == tcph->source && sess->dport == tcph->dest) {
+                return sess;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+// fetch buffer from the tcp session  
+char *fetch_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len) {
+    spin_lock(&tcp_lock);
+    
+    // fetch tcp session
+    struct tcp_session *sess = fetch_tcp_session_unlock(iph, tcph);
+    if (!sess) {
+        spin_unlock(&tcp_lock);
+        return NULL;
+    }
+
+    *len = sess->buffer_used;
+    char *buffer = kmalloc(*len, GFP_ATOMIC);
+    if (!buffer) {
+        spin_unlock(&tcp_lock);
+        return NULL;
+    }
+    memcpy(buffer, sess->buffer, *len);
+    
+    spin_unlock(&tcp_lock);
+    return buffer;
+}
+
+// append tcp data to the tcp buffer
+static int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
+    spin_lock(&tcp_lock);
+
+    // fetch tcp session
+    struct tcp_session *sess = fetch_tcp_session_unlock(iph, tcph);
+    if (!sess) {
+        spin_unlock(&tcp_lock);
+        return TCP_SESSION_NOT_FOUND;
+    }
+
+    // calculate data's length and check the valid
+    int data_len = ntohs(iph->tot_len)-((iph->ihl*4)+(tcph->doff*4));
+    if (data_len <= 0) {
+        spin_unlock(&tcp_lock);
+        return TCP_INVALID_LENGTH;
+    } else if (data_len > max_tcp_buffer) {
+        spin_unlock(&tcp_lock);
+        return TCP_DATA_TOO_BIG;
+    } else if (sess->buffer_used+data_len > max_tcp_buffer) {        
+        sess->buffer_used = 0;
+        memset(sess->buffer, 0, max_tcp_buffer);
+    }
+    sess->buffer_used += data_len;
+
+    // calculate buffer offset
+    int offset = ntohl(tcph->seq)-ntohl(sess->init_seq)-1;
+    if (offset < 0) offset = 0;
+
+    int data_offset = ((char *)tcph+tcph->doff*4)-(char *)skb->data;
+    if (skb_copy_bits(skb, data_offset, sess->buffer+offset, data_len) < 0) {
+        sess->buffer_used -= data_len;
+        spin_unlock(&tcp_lock);
+        
+        return TCP_BUFFER_COPY_ERROR;
+    } 
+    
+    spin_unlock(&tcp_lock);
+    return 0;
+}
+
+// add a new session to the tcp sessions array
+static int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+    spin_lock(&tcp_lock);
+
+    int i = find_free_index(tcph->source, iph->daddr);
+    if (i < 0) {
+        spin_unlock(&tcp_lock);
+        return i;
+    }
+
+    char *buffer = kmalloc(max_tcp_buffer, GFP_ATOMIC);
+    if (!buffer) {
+        spin_unlock(&tcp_lock);
+        return TCP_ALLOC_ERROR;
+    }
+
+    tcp_sessions[i] = (struct tcp_session){
+        .daddr = iph->daddr,
+        .sport = tcph->source,
+        .dport = tcph->dest,
+        .init_seq = tcph->seq,
+        .buffer = buffer,
+        .buffer_used = 0,
+        .state = SESSION_USED,
+    };
+    
+
+    spin_unlock(&tcp_lock);
+    return 0;
+}
+
+// remove tcp session to the tcp sessions array
+static int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+    spin_lock(&tcp_lock);
+
+    // fetch tcp session
+    struct tcp_session *sess = fetch_tcp_session_unlock(iph, tcph);
+    if (!sess) {
+        spin_unlock(&tcp_lock);
+        return TCP_SESSION_NOT_FOUND;
+    }
+
+    kfree(sess->buffer);
+    memset(sess, 0, sizeof(struct tcp_session));
+
+    spin_unlock(&tcp_lock);
+    return 0;
+}
+
+// parse tcp packet
+void parse_tcp(struct iphdr *iph, struct sk_buff *skb) {
+    const struct tcphdr *tcph = tcp_hdr(skb);
+    if (tcph->syn && !tcph->ack) {
+        switch (new_tcp_session(iph, tcph)) {
+            case TCP_ALLOC_ERROR:
+                printk(KERN_ERR "tcp new connection error: alloc\n");
+                return;
+            case TCP_SESSIONS_FULL:
+                printk(KERN_ERR "tcp new connection error: sessions array is full\n");
+                return;
+        }
+    } else if (tcph->fin) {
+        remove_tcp_session(iph, tcph);
+    } else {
+        switch (append_tcp_data(skb, iph, tcph)) {
+            case TCP_INVALID_LENGTH:
+                printk(KERN_ERR "tcp add data error: invalid length\n");
+                return;
+            case TCP_BUFFER_COPY_ERROR:
+                printk(KERN_ERR "tcp add data error: buffer copy\n");
+                return;
+        }
+    }
+}
