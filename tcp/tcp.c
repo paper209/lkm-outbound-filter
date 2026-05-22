@@ -132,7 +132,7 @@ static int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr
     if (data_len <= 0) {
         spin_unlock(&tcp_lock);
         return TCP_INVALID_LENGTH;
-    } else if (data_len > max_tcp_buffer || offset+data_len > max_tcp_buffer) {
+    } else if (data_len > max_tcp_buffer) {
         spin_unlock(&tcp_lock);
         return TCP_DATA_TOO_BIG;
     } else if (sess->buffer_used+data_len > max_tcp_buffer) {        
@@ -144,6 +144,10 @@ static int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr
     // calculate buffer offset
     int offset = ntohl(tcph->seq)-ntohl(sess->init_seq)-1;
     if (offset < 0) offset = 0;
+    if (offset+data_len > max_tcp_buffer) {
+        spin_unlock(&tcp_lock);
+        return TCP_DATA_TOO_BIG;
+    }
 
     int data_offset = ((char *)tcph+tcph->doff*4)-(char *)skb->data;
     if (skb_copy_bits(skb, data_offset, sess->buffer+offset, data_len) < 0) {
