@@ -132,7 +132,7 @@ static int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr
     if (data_len <= 0) {
         spin_unlock(&tcp_lock);
         return TCP_INVALID_LENGTH;
-    } else if (data_len > max_tcp_buffer) {
+    } else if (data_len > max_tcp_buffer || offset+data_len > max_tcp_buffer) {
         spin_unlock(&tcp_lock);
         return TCP_DATA_TOO_BIG;
     } else if (sess->buffer_used+data_len > max_tcp_buffer) {        
