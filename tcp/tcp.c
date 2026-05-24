@@ -4,6 +4,7 @@
 #include <linux/spinlock.h>
 #include <linux/skbuff.h>
 #include <linux/slab.h>
+#include <linux/jiffies.h>
 
 #include "tcp.h"
  
@@ -11,6 +12,8 @@ static spinlock_t tcp_lock;
 
 static unsigned int max_tcp_buffer = 0; // tcp session's buffer max length
 static unsigned int max_tcp_sessions = 0; // max tcp sessions count
+
+static unsigned int tcp_session_timeout = 0;
 
 static struct tcp_session *tcp_sessions = NULL;
 
@@ -34,11 +37,19 @@ static int init_tcp_sessions(unsigned int max_sessions) {
 }
 
 // init spin lock and tcp sessions array
-int init_tcp(unsigned int max_sessions, unsigned int max_buffer) {
+int init_tcp(unsigned int max_sessions, unsigned int max_buffer, unsigned int timeout) {
     init_tcp_lock();
+    tcp_session_timeout = timeout;
     max_tcp_buffer = max_buffer;
     
     return init_tcp_sessions(max_sessions);
+}
+
+// cleanup tcp session
+static void cleanup_session(struct tcp_session *sess) {
+    kfree(sess->bitmap);
+    kfree(sess->buffer);
+    memset(sess, 0, sizeof(struct tcp_session));
 }
 
 // deinit tcp sessions array
@@ -53,9 +64,14 @@ void deinit_tcp(void) {
 
     for (int i = 0; i < max_tcp_sessions; i++) {
         struct tcp_session *sess = &tcp_sessions[i];
-        kfree(sess->buffer);
+        cleanup_session(sess);
     }
     kfree(tcp_sessions);
+
+    tcp_sessions = NULL;
+    max_tcp_buffer = 0;
+    max_tcp_sessions = 0;
+    tcp_session_timeout = 0;
 
     spin_unlock(&tcp_lock);
 }
@@ -65,9 +81,29 @@ static int find_free_index(__be16 sport, __be32 daddr) {
     // minimum start index number
     unsigned int min = (ntohs(sport)+ntohl(daddr))%max_tcp_sessions;
     
-    // find free index number and return
+    // find free index min to max_tcp_sessions
     for (int i = min; i < max_tcp_sessions; i++) {
         struct tcp_session *sess = &tcp_sessions[i];
+
+        // check the lastseen and clear timeout sessions
+        if (time_after(jiffies, sess->last_seen+msecs_to_jiffies(tcp_session_timeout*1000))) {
+            cleanup_session(sess);
+        }
+
+        if (sess->state == SESSION_EMPTY) {
+            return i;
+        }
+    }
+
+    // find free index 0 to min
+    for (int i = 0; i < min; i++) {
+        struct tcp_session *sess = &tcp_sessions[i];
+
+        // check the lastseen and clear timeout sessions
+        if (time_after(jiffies, sess->last_seen+msecs_to_jiffies(tcp_session_timeout*1000))) {
+            cleanup_session(sess);
+        }
+
         if (sess->state == SESSION_EMPTY) {
             return i;
         }
@@ -84,8 +120,21 @@ static struct tcp_session *fetch_tcp_session_unlock(struct iphdr *iph, struct tc
     for (int i = min; i < max_tcp_sessions; i++) {
         struct tcp_session *sess = &tcp_sessions[i];   
         if (sess->state == SESSION_USED) {
-            if (sess->daddr == iph->daddr && sess->sport == tcph->source && sess->dport == tcph->dest) {
-                return sess;
+            if (sess->saddr == iph->saddr && sess->daddr == iph->daddr) {
+                if (sess->sport == tcph->source && sess->dport == tcph->dest) {
+                    return sess;
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i < min; i++) {
+        struct tcp_session *sess = &tcp_sessions[i];
+        if (sess->state == SESSION_USED) {
+            if (sess->saddr == iph->saddr && sess->daddr == iph->daddr) {
+                if (sess->sport == tcph->source && sess->dport == tcph->dest) {
+                    return sess;
+                }
             }
         }
     }
@@ -104,7 +153,7 @@ char *fetch_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len
         return NULL;
     }
 
-    *len = sess->buffer_used;
+    *len = sess->max_index+1;
     char *buffer = kmalloc(*len, GFP_ATOMIC);
     if (!buffer) {
         spin_unlock(&tcp_lock);
@@ -132,33 +181,88 @@ static int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr
     if (data_len <= 0) {
         spin_unlock(&tcp_lock);
         return TCP_INVALID_LENGTH;
-    } else if (data_len > max_tcp_buffer) {
-        spin_unlock(&tcp_lock);
-        return TCP_DATA_TOO_BIG;
-    } else if (sess->buffer_used+data_len > max_tcp_buffer) {        
-        sess->buffer_used = 0;
-        memset(sess->buffer, 0, max_tcp_buffer);
-    }
-    sess->buffer_used += data_len;
+    } 
 
     // calculate buffer offset
     int offset = ntohl(tcph->seq)-ntohl(sess->init_seq)-1;
     if (offset < 0) offset = 0;
+
+    // check the buffer max length and data length
     if (offset+data_len > max_tcp_buffer) {
+        if (data_len > max_tcp_buffer) {
+            spin_unlock(&tcp_lock);
+            return TCP_DATA_TOO_BIG;
+        }
+
+        memset(sess->buffer, 0, max_tcp_buffer);
+        memset(sess->bitmap, 0, max_tcp_buffer/8+1);
+        sess->max_index = 0;
+        sess->init_seq = tcph->seq;
+        
+        offset = 0;
+    }
+
+    char *tmp = kmalloc(data_len, GFP_ATOMIC);
+    if (!tmp) {
         spin_unlock(&tcp_lock);
-        return TCP_DATA_TOO_BIG;
+        return TCP_ALLOC_ERROR;
     }
 
     int data_offset = ((char *)tcph+tcph->doff*4)-(char *)skb->data;
-    if (skb_copy_bits(skb, data_offset, sess->buffer+offset, data_len) < 0) {
-        sess->buffer_used -= data_len;
+    if (skb_copy_bits(skb, data_offset, tmp, data_len) < 0) {
+        kfree(tmp);
         spin_unlock(&tcp_lock);
-        
         return TCP_BUFFER_COPY_ERROR;
     } 
+
+    // linux is last wins and windows is first wins
+    if (sess->os == LINUX) {
+        memcpy(sess->buffer+offset, tmp, data_len);
+        for (int i = 0; i < data_len; i++) {
+            int pos = offset+i;
+            sess->bitmap[(pos)/8] |= (1 << ((pos)%8));
+        }
+    } else {
+        for (int i = 0; i < data_len; i++) {
+            int pos = offset+i;
+            if ((sess->bitmap[pos/8] >> (pos%8)) & 1) {
+                continue;
+            }
+            sess->buffer[pos] = tmp[i];
+            sess->bitmap[(pos)/8] |= (1 << ((pos)%8));
+        }
+    }
+
+    int end = offset+data_len-1;
+    if (end > sess->max_index) {
+        sess->max_index = end;
+    }
     
+    sess->last_seen = jiffies;
+    kfree(tmp);
+
     spin_unlock(&tcp_lock);
     return 0;
+}
+
+// infer the os using ttl, windows
+static enum os infer_os(struct iphdr *iph, struct tcphdr *tcph) {
+    int linux_score = 0, windows_score = 0;
+    if (iph->ttl <= 64) {
+        linux_score++;
+    } else {
+        windows_score++;
+    }
+
+    if (ntohs(tcph->window) == 5840) {
+        linux_score++;
+    } else if (ntohs(tcph->window) == 65535 || ntohs(tcph->window) == 64240) {
+        windows_score++;
+    }
+
+
+    // if same score, return default os(linux)
+    return (linux_score >= windows_score) ? LINUX:WINDOWS;
 }
 
 // add a new session to the tcp sessions array
@@ -177,13 +281,24 @@ static int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
         return TCP_ALLOC_ERROR;
     }
 
+    char *bitmap = kcalloc(max_tcp_buffer/8+1, sizeof(char), GFP_ATOMIC);
+    if (!bitmap) {
+        kfree(buffer);
+        spin_unlock(&tcp_lock);
+        return TCP_ALLOC_ERROR;
+    }
+
     tcp_sessions[i] = (struct tcp_session){
+        .saddr = iph->saddr,
         .daddr = iph->daddr,
         .sport = tcph->source,
         .dport = tcph->dest,
         .init_seq = tcph->seq,
         .buffer = buffer,
-        .buffer_used = 0,
+        .max_index = 0,
+        .bitmap = bitmap,
+        .last_seen = jiffies,
+        .os = infer_os(iph, tcph),
         .state = SESSION_USED,
     };
     
@@ -203,8 +318,7 @@ static int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
         return TCP_SESSION_NOT_FOUND;
     }
 
-    kfree(sess->buffer);
-    memset(sess, 0, sizeof(struct tcp_session));
+    cleanup_session(sess);
 
     spin_unlock(&tcp_lock);
     return 0;
@@ -222,7 +336,7 @@ void parse_tcp(struct iphdr *iph, struct sk_buff *skb) {
                 printk(KERN_ERR "tcp new connection error: sessions array is full\n");
                 return;
         }
-    } else if (tcph->fin) {
+    } else if (tcph->fin || tcph->rst) {
         remove_tcp_session(iph, tcph);
     } else {
         switch (append_tcp_data(skb, iph, tcph)) {
