@@ -1,10 +1,6 @@
 #include <linux/kernel.h>
 #include <linux/string.h>
 #include <linux/types.h>
-#include <linux/ip.h>
-#include <linux/tcp.h>
-#include <linux/udp.h>
-#include <linux/icmp.h>
 #include <linux/spinlock.h>
 
 #include "filter.h"
@@ -169,7 +165,12 @@ static bool check_signature(const char *buf, int buf_len) {
 }
 
 // check the signature filters and compare the buffer
-bool signature_filter(struct iphdr *iph, struct sk_buff *skb) {
+bool signature_filter(char *buf, unsigned int len) {
+    return check_signature(buf, len);
+}
+
+// check the signature filters and compare the buffer
+/*bool signature_filter(struct iphdr *iph, struct sk_buff *skb) {
     switch (iph->protocol) {
         // tcp
         case 6: {
@@ -231,4 +232,4 @@ bool signature_filter(struct iphdr *iph, struct sk_buff *skb) {
     }
 
     return false;
-}
+}*/
