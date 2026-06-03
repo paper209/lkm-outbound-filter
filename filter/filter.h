@@ -24,7 +24,4 @@ void deinit_filters(void);
 int init_filters(unsigned int max_len);
 void init_filters_lock(void);
 
-bool fast_filter(struct sk_buff *skb, struct iphdr *iph);
-bool slow_filter(struct sk_buff *skb, struct iphdr *iph);
-
 #endif
