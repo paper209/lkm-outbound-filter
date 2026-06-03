@@ -2,12 +2,8 @@
 #include <linux/skbuff.h>
 #include <linux/udp.h>
 
+#include "set_parser.h"
 #include "../filter/filter.h"
-#include "../filter/port_filter.h"
-#include "../filter/netmask_filter.h"
-#include "../filter/signature_filter.h"
-
-#include "parser.h"
 
 static void parse_port_filter(const char *buf, const size_t len) {
     if (len < 4) return;
