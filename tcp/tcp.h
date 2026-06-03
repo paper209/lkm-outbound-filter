@@ -47,7 +47,9 @@ struct tcp_session {
 int init_tcp(unsigned int max_sessions, unsigned int max_buffer, unsigned int timeout);
 void deinit_tcp(void);
 
-void parse_tcp(struct iphdr *iph, struct sk_buff *skb);
+int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph);
+int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph);
+int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph);
 char *fetch_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len);
 
 #endif
