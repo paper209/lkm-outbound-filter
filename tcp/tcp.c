@@ -166,7 +166,7 @@ char *fetch_tcp_buffer(struct iphdr *iph, struct tcphdr *tcph, unsigned int *len
 }
 
 // append tcp data to the tcp buffer
-static int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
+int append_tcp_data(struct sk_buff *skb, struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
 
     // fetch tcp session
@@ -266,7 +266,7 @@ static enum os infer_os(struct iphdr *iph, struct tcphdr *tcph) {
 }
 
 // add a new session to the tcp sessions array
-static int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
 
     int i = find_free_index(tcph->source, iph->daddr);
@@ -308,7 +308,7 @@ static int new_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 }
 
 // remove tcp session to the tcp sessions array
-static int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
+int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
     spin_lock(&tcp_lock);
 
     // fetch tcp session
@@ -322,30 +322,4 @@ static int remove_tcp_session(struct iphdr *iph, struct tcphdr *tcph) {
 
     spin_unlock(&tcp_lock);
     return 0;
-}
-
-// parse tcp packet
-void parse_tcp(struct iphdr *iph, struct sk_buff *skb) {
-    const struct tcphdr *tcph = tcp_hdr(skb);
-    if (tcph->syn && !tcph->ack) {
-        switch (new_tcp_session(iph, tcph)) {
-            case TCP_ALLOC_ERROR:
-                printk(KERN_ERR "tcp new connection error: alloc\n");
-                return;
-            case TCP_SESSIONS_FULL:
-                printk(KERN_ERR "tcp new connection error: sessions array is full\n");
-                return;
-        }
-    } else if (tcph->fin || tcph->rst) {
-        remove_tcp_session(iph, tcph);
-    } else {
-        switch (append_tcp_data(skb, iph, tcph)) {
-            case TCP_INVALID_LENGTH:
-                printk(KERN_ERR "tcp add data error: invalid length\n");
-                return;
-            case TCP_BUFFER_COPY_ERROR:
-                printk(KERN_ERR "tcp add data error: buffer copy\n");
-                return;
-        }
-    }
 }
