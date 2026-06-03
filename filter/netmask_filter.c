@@ -120,6 +120,7 @@ bool netmask_filter(struct iphdr *iph) {
         if (f->state == FILTER_USED) {
             if ((f->address&f->mask) == (iph->daddr&f->mask)) {
                 spin_unlock(&netmask_lock);
+                printk(KERN_INFO "outbound filter: netmask: %pI4\n", &iph->daddr);
                 return true;
             } 
         }
