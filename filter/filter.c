@@ -26,26 +26,3 @@ void deinit_filters(void) {
     deinit_netmask_filter();
     deinit_signature_filter();
 }
-
-// fast filter (port, netmask)
-bool fast_filter(struct sk_buff *skb, struct iphdr *iph) {
-    if (port_filter(iph, skb)) {
-        printk(KERN_INFO "outbound filter: fast filter: port filtered: %pI4 -> %pI4\n", &iph->saddr, &iph->daddr);
-        return true;
-    } else if (netmask_filter(iph)) {
-        printk(KERN_INFO "outbound filter: fast filter: netmask filtered: %pI4 -> %pI4\n", &iph->saddr, &iph->daddr);
-        return true;
-    }
-
-    return false;
-}
-
-// slow filter (signature filter)
-bool slow_filter(struct sk_buff *skb, struct iphdr *iph) {
-    if (signature_filter(iph, skb)) {
-        printk(KERN_INFO "outbound filter: slow filter: signature filtered: %pI4 => %pI4\n", &iph->saddr, &iph->daddr);
-        return true;
-    }
-
-    return false;
-}
