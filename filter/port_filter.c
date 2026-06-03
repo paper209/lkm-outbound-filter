@@ -112,32 +112,9 @@ void remove_port_filter(__be16 port, __u8 protocol) {
 }
 
 // check the port filters
-bool port_filter(struct iphdr *iph, struct sk_buff *skb) {
-    struct filter packet;
-    switch (iph->protocol) {
-        // tcp
-        case 6: {
-            const struct tcphdr *tcph = tcp_hdr(skb);
-            packet.protocol = 6;
-            packet.port = tcph->dest;
-
-            break;
-        }
-
-        // udp
-        case 17: {
-            const struct udphdr *udph = udp_hdr(skb);
-            packet.protocol = 17;
-            packet.port = udph->dest;
-
-            break;
-        }
-
-        default: return false;
-    }
-    
+bool port_filter(__u8 protocol, __be16 port) {    
     // calculate minimum start index number
-    unsigned int min = (ntohs(packet.port)+packet.protocol)%max_filters_len;
+    unsigned int min = (ntohs(port)+protocol)%max_filters_len;
     spin_lock(&port_lock);
 
     // check the port filters
@@ -145,7 +122,7 @@ bool port_filter(struct iphdr *iph, struct sk_buff *skb) {
         struct filter *f = &filters[i];
 
         if (f->state == FILTER_USED) {
-            if (f->protocol == packet.protocol && f->port == packet.port) {
+            if (f->protocol == protocol && f->port == port) {
                 spin_unlock(&port_lock);
                 return true;
             } 
