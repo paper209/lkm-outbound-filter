@@ -10,26 +10,16 @@
 #include "config.h"
 #include "tcp/tcp.h"
 #include "filter/filter.h"
-#include "parser/parser.h"
+#include "parser/set_parser.h"
+#include "parser/udp_parser.h"
+#include "parser/tcp_parser.h"
+#include "parser/icmp_parser.h"
 
 unsigned int parse_protocol(struct iphdr *iph, struct sk_buff *skb) {
     switch (iph->protocol) {
-        // udp
-        case 17: {
-            const struct udphdr *udph = udp_hdr(skb);
-            if (ntohs(udph->dest) == SET_PORT && iph->daddr == htonl(SET_ADDR)) {
-                parse_set_packet(skb, udph);
-                return NF_DROP;
-            }
-
-            break;
-        }
-
-        // tcp
-        case 6: {
-            parse_tcp(iph, skb);
-            break;
-        }
+        case 1: return parse_icmp(iph, skb); // icmp
+        case 17: return parse_udp(iph, skb); // udp
+        case 6: return parse_tcp(iph, skb); // tcp
     }
 
     return NF_ACCEPT;
@@ -37,18 +27,11 @@ unsigned int parse_protocol(struct iphdr *iph, struct sk_buff *skb) {
 
 unsigned int hook(void *pb, struct sk_buff *skb, const struct nf_hook_state *state) {
     const struct iphdr *iph = ip_hdr(skb);
-    if (fast_filter(skb, iph)) {
+    if (netmask_filter(iph)) {
         return NF_DROP;
     }
 
-    unsigned int n = parse_protocol(iph, skb);
-    if (n == NF_DROP) return n;
-
-    if (slow_filter(skb, iph)) {
-        return NF_DROP;
-    }
-
-    return NF_ACCEPT;
+    return parse_protocol(iph, skb);
 }
 
 const struct nf_hook_ops nfho = {
